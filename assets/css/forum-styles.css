@@ -1,0 +1,803 @@
+/* forum-styles.css */
+
+.forum-main {
+  color: #ffffff;
+  background-color: #000000;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100vw;
+  box-sizing: border-box;
+  background-size: auto;
+  background-position: center;
+  background-attachment: fixed;
+}
+  
+.forum-header {
+  width: 100%;
+  padding: 2vh;
+  background-color: #000000;
+  color: #add8e6; /* Light blue color */
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: bold;
+  margin-bottom: 0;
+}
+  
+.forum-submenu {
+  width: 100%;
+  padding: 1vh 2vh;
+  background: rgba(0, 0, 0, 0.8);
+  text-align: center;
+  margin-top: 0;
+}
+  
+.forum-rooms {
+  display: flex;
+  justify-content: center;
+  gap: 2vh; /* Increased gap for better spacing */
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+  
+.room-button {
+  background-color: #317e78;
+  color: #ffffff;
+  border: 2px solid #317e78;
+  border-radius: 2vh;
+  padding: 1vh 2vh;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+  
+.room-button:hover {
+  background-color: #19403d;
+}
+
+.forum-content {
+  flex-grow: 1;
+  width: 90%;
+  padding: 3vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  border: 3px solid #ffffff; /* Increased border width */
+}
+  
+.room-content {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2vh;
+  border-radius: 1vh;
+  width: 100%;
+  box-sizing: border-box;
+  /* text-align: center; */
+}
+
+.room-title {
+  color: #add8e6; /* Light blue color for room name */
+  text-align: center;
+  margin-bottom: 2vh;
+  font-size: 2rem;
+}
+
+.message-item {
+  background: #1c1c1c;
+  color: #ffffff;
+  padding: 1vh;
+  margin-bottom: 1vh;
+  border-radius: 0.8vh;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid #ffffff;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 1vh;
+  font-size: 1.25rem;
+  color: white
+}
+
+  .message-header.username {
+  color: #1b8fc4;
+}
+
+.reply-username {
+  font-weight: bold;
+  color:#58859a
+  }
+
+.reply-timestamp {
+  font-style: italic;
+  color: rgb(174, 202, 213)
+  }
+
+.reply-content {
+  margin: 0;
+  color: #747474;
+  font-size: 1.0rem;
+  background-color: #14212c;
+}
+
+.username {
+  font-weight: bold;
+  color:#228ec0
+}
+
+.timestamp {
+  font-style: italic;
+  color: rgb(157, 167, 151)
+}
+
+
+
+.reply-button {
+  align-self: flex-end;
+  margin-top: 1vh;
+  background-color: #167089;
+  color: #ffffff;
+  border: none;
+  border-radius: 1vh;
+  padding: 0.3vh 0.6vh;
+  cursor: pointer;
+}
+
+.reply-button:hover {
+  background-color: #19403d;
+}
+
+/* forum-styles.css additions */
+
+.message-input-section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: 100%;
+  gap: 1vh; /* Spacing between toolbar and editor */
+  background-color: black;
+  padding: 1vh;
+}
+
+/* .ql-editor {
+  flex-grow: 1;
+  font-size: 1.25rem;
+} */
+
+.message-input {
+  flex-grow: 1;
+  padding: 2vh;
+  border-radius: 1vh;
+  border: 1px solid #cccccc;
+  font-size: 1.25rem;
+  /* margin-right: 8vh; */
+  box-sizing: border-box;
+  min-height: 15vh; 
+}
+
+.send-button {
+  background-color: #13a97c;
+  color: #ffffff;
+  border: none;
+  border-radius: 1vh;
+  padding: 2vh 4vh;
+  cursor: pointer;
+}
+
+.send-button:hover {
+  background-color: #19403d;
+}
+
+.messages-container {
+  width: 100%;
+  margin-bottom: 5vh; /* Ensure space above input section */
+  overflow-y: auto;
+  padding-bottom: 1vh;
+  box-sizing: border-box;
+}
+
+.load-more-button {
+  align-self: flex-end;
+  margin-top: 1vh;
+  background-color: #167089;
+  color: #ffffff;
+  border: 1px grey dashed;
+  border-radius: 1vh;
+  padding: 0.3vh 0.6vh;
+  cursor: pointer;
+}
+
+.load-more-button:hover {
+  background-color: #19403d;
+}
+
+.pagination-container button {
+  background-color: black;
+  color: white;
+  border: 1px solid white;
+  padding: 5px 10px;
+  margin: 5px;
+  cursor: pointer;
+}
+
+.pagination-container button:hover {
+  background-color: white;
+  color: black;
+  border: 1px solid black;
+}
+
+.pagination-container button.active-page {
+  background-color: lightblue;
+  color: black;
+  border: 1px solid lightblue;
+}
+
+.tools-header {
+  width: 100%;
+  padding: 2vh;
+  background-color: #000000;
+  color: #add8e6; /* Light blue color */
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: bold;
+  margin-bottom: 0;
+}
+
+.tools-main {
+  color: #ffffff;
+  background-color: #000000;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100vw;
+  box-sizing: border-box;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.tools-content {
+  flex-grow: 1;
+  width: 90%;
+  padding: 3vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  border: 3px solid #ffffff; /* Increased border width */
+}
+
+.tools-submenu {
+  width: 100%;
+  padding: 1vh 2vh;
+  background: rgba(5, 5, 6, 0.8);
+  text-align: center;
+  margin-top: 0;
+}
+
+.tools-button {
+  background-color: #1d2c3d;
+  color: #ffffff;
+  border: 2px solid #317e78;
+  border-radius: 2vh;
+  padding: 1vh 2vh;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.tools-button:hover {
+  background-color: #191d40;
+}
+
+.attachments-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.attachment img {
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  transition: transform 0.3s;
+}
+
+.attachment img:hover {
+  transform: scale(1.25);
+}
+
+.attachment button {
+    align-self: flex-end;
+    margin-top: 1vh;
+    background-color: #0f4c41;
+    color: #ffffff;
+    border: dotted;
+    border-radius: 1vh;
+    padding: 0.3vh 0.6vh;
+    cursor: pointer;
+}
+
+.image-modal {
+  display: none; /* Hidden by default */
+  position: fixed; /* Stay in place */
+  z-index: 1000; /* Sit on top */
+  left: 10%;
+  top: 10%;
+  width: 80%;
+  height: 80%;
+  overflow: none; /* Enable scroll if needed */
+  background-color: rgba(0, 0, 0, 0.8); /* Black w/ opacity */
+}
+
+.modal-content {
+  margin: auto;
+  display: block;
+  border: 2px dashed #638b93;
+  width: 60%;
+  height: auto;
+  max-width: 1200vh;
+}
+
+.close {
+  position: absolute;
+  top: 15px;
+  right: 25px;
+  color: #fff;
+  font-size: 35px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.download-button {
+  margin: 15px auto;
+  display: block;
+  color: white;
+  background-color: #436370;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+
+/* this is the text from the quill editor, hopefully these settings will prevent the page styles from affecting the formatted html from editor posts. */
+.message-text {
+  margin: 0;             /* Reset unwanted margins */
+  font-size: 1.25rem;       /* Set a base font size */
+  padding: 0;            /* Reset unwanted padding */
+  text-align: initial;   /* Reset any forced text alignment */
+  color: inherit;        /* Ensure it takes the color correctly */
+  text-decoration: none; /* Remove any unwanted underline */
+}
+
+/*----------------------------------------------------------------------------------------------------------------------------------MINTER-BOARD-STYLES---------*/
+/* background-image: url(../../assets/images/background.png); */
+/* General Page Styles */
+/* Main Container for Minter Board */
+
+body {
+  background-color: black;
+}
+.minter-board-main {
+  background-color: #000000;
+  color: #ffffff;
+  border-radius: 1vh;
+  padding: 2vh;
+}
+
+/* Heading Style */
+.minter-board-main h1 {
+  font-size: 4vh;
+  color: #76c7c0;
+  margin-bottom: 2vh;
+}
+
+/* Publish Card Button */
+.publish-card-button {
+  background-color: #161820;
+  color: #ffffff;
+  border: none;
+  border-radius: 1vh;
+  padding: 2vh;
+  font-size: 2vh;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.publish-card-button:hover {
+  background-color: #1b214a;
+}
+
+/* Cards Container */
+
+.cards-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2vh; /* Adjust spacing as needed */
+}
+
+/* Publish Card View */
+.publish-card-view {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Centers vertically */
+  align-items: center; /* Centers horizontally */
+  min-height: 80vh; /* Ensures the view takes full height of the viewport */
+}
+
+
+/* Form Heading */
+.publish-card-view h3 {
+  font-size: 2vh;
+  color: #86a5ae;
+  margin-bottom: 2vh;
+}
+
+/* Form Label */
+.publish-card-view label {
+  display: block;
+  font-size: 1.8vh;
+  color: #76b4c7;
+  margin-bottom: 1vh;
+  font-weight: bold;
+}
+
+/* Input and Textarea Styling */
+.publish-card-view input[type="text"],
+.publish-card-view textarea {
+  width: 100%;
+  background-color: #121212;
+  color: #ffffff;
+  border: 0.2vh solid #444444;
+  border-radius: 0.5vh;
+  padding: 1.5vh;
+  font-size: 1.8vh;
+  margin-bottom: 2vh;
+}
+
+.publish-card-view textarea {
+  min-height: 15vh;
+  resize: vertical;
+}
+
+/* Links Container */
+#links-container {
+  margin-bottom: 2vh;
+}
+
+.card-link {
+  width: 100%;
+  margin-bottom: 1.5vh;
+}
+
+/* Buttons Inside Form */
+#publish-card-form button {
+  background-color: #76c7c0;
+  color: #1e1e1e;
+  border: none;
+  border-radius: 0.5vh;
+  padding: 1.5vh;
+  font-size: 2vh;
+  cursor: pointer;
+  margin-right: 1vh;
+  transition: background-color 0.3s;
+}
+
+#publish-card-form button:hover {
+  background-color: #5e92a8;
+}
+
+#publish-card-form #add-link-button {
+  background-color: #233748;
+  color: #ffffff;
+  margin-bottom: 2vh;
+}
+
+#publish-card-form #add-link-button:hover {
+  background-color: #1b1936;
+}
+
+/* Cancel Button */
+#publish-card-form #cancel-publish-button {
+  background-color: #463737;
+  color: #ffffff;
+}
+
+#publish-card-form #cancel-publish-button:hover {
+  background-color: #281e1e;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .publish-card-view {
+    width: 90%;
+    padding: 2vh;
+  }
+
+  .publish-card-button {
+    font-size: 1.8vh;
+    padding: 1.5vh;
+  }
+
+  #publish-card-form button {
+    font-size: 1.8vh;
+    padding: 1.2vh;
+  }
+}
+@media (max-width: 768px) {
+  .minter-card {
+    flex: 1 1 calc(50% - 20px); /* Two cards per row on medium screens */
+  }
+}
+
+@media (max-width: 480px) {
+  .minter-card {
+    flex: 1 1 100%; /* Full-width cards on small screens */
+  }
+}
+
+.minter-card {
+  background-color: #1e1e2e; /* Dark background */
+  flex: 1 1 calc(33%); 
+  min-width: 25rem; /* Ensure the card never gets smaller than 15rem */
+  max-width: calc(25% - 2rem); /* Prevent cards from growing larger than 1/4 */
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 1vh;
+  min-height: 30vh;
+  max-height: auto;
+  margin: 1vh;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Soft shadow */
+  font-family: 'Arial', sans-serif;
+  transition: transform 0.2s ease-in-out;
+}
+
+.minter-card:hover {
+  transform: translateY(-5px); /* Slightly lift card on hover */
+}
+
+.minter-card-header h3 {
+  margin: 0;
+  font-size: 1.5em;
+  color: #ffae42; /* Highlight for the header */
+}
+
+.minter-card h5 {
+  margin: 0;
+  font-size: 1.0em;
+  color: lightgreen;
+  text-align: center;
+}
+
+.minter-card-header p {
+  font-size: 0.9em;
+  color: #cccccc; /* Subdued color for additional header info */
+}
+
+.minter-card-results {
+  margin: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.minter-card-results h5 {
+  margin-bottom: 1vh;
+  font-size: 1.1vh;
+  color: lightgreen;
+  text-align: center;
+}
+
+.minter-card-results div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.minter-card-results span {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.9em;
+}
+
+.minter-card-results .admin-yes {
+  background-color: #ccffcc; /* Light green */
+  color: #006600;
+}
+
+.minter-card-results .admin-no {
+  background-color: #ffcccc; /* Light red */
+  color: #660000;
+}
+
+.minter-card-results .minter-yes {
+  background-color: #99cc99; /* Medium green */
+  color: #004d00;
+}
+
+.minter-card-results .minter-no {
+  background-color: #cc9999; /* Medium red */
+  color: #4d0000;
+}
+
+.minter-card-results .total-yes {
+  background-color: #669966; /* Dark green */
+  color: #003300;
+}
+
+.minter-card-results .total-no {
+  background-color: #996666; /* Dark red */
+  color: #330000;
+}
+
+.info .content-preview {
+  font-size: 0.85em;
+  color: #dddddd;
+}
+
+.minter-card .info {
+  background-color: #2a2a2a; /* Very dark grey background */
+  border: 1px solid #d3d3d3; /* Light grey border */
+  padding: 1rem; /* Add padding inside the section */
+  margin: 1rem 0; /* Add margin outside the section for spacing */
+  font-size: 0.75em; /* Set the font size */
+  line-height: 1.5; /* Optional: Adjust line spacing for better readability */
+  height: calc(1.5 * 1000 / 66 * 0.75em); /* Dynamically calculate height to fit 1000 characters */
+  overflow-y: auto; /* Enable vertical scrolling if content overflows */
+  border-radius: 8px; /* Optional: Add rounded corners */
+  color: #f1f1f1; /* Optional: Light grey text color for readability */
+}
+
+.info .toggle-content-button {
+  background-color: #ffae42; /* Highlight for toggle button */
+  color: #1e1e2e;
+  border: none;
+  font-size: 0.75em;
+  border-radius: 8px;
+  padding: 1px 2px;
+  cursor: pointer;
+}
+
+.support-header {
+  margin-bottom: 1vh;
+  font-size: 1.1vh;
+  color: lightgreen;
+  text-align: center;
+}
+
+.results-header {
+  margin-top: 1vh;
+}
+
+.info-links button {
+  background-color: #1e90ff; /* Link button color */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8em;
+  padding: 0.15vh 0.3vh;
+  margin: 0.07vh;
+  cursor: pointer;
+}
+
+.info-links button:hover {
+  background-color: #0055cc;
+}
+
+.actions {
+  display: flex;
+  max-width: 100%;
+  justify-content: space-between;
+}
+
+.actions h5{
+  margin-bottom: 1vh;
+  font-size: 1.5vh;
+  color: lightgreen
+}
+.actions .yes {
+  background-color: #00cc00; /* Green for yes */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 1vh 2.5vh;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.actions .yes:hover {
+  background-color: #009900;
+}
+
+.actions .no {
+  background-color: #cc0000; /* Red for no */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 1.0vh 2.5vh;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.actions .no:hover {
+  background-color: #990000;
+}
+
+.actions .comment {
+  background-color: #cccccc; /* Grey for comments */
+  color: #1e1e2e;
+  border: none;
+  border-radius: 8px;
+  padding: 1.0vh 1.5vh;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.actions .comment:hover {
+  background-color: #999999;
+}
+
+.comments-section {
+  background-color: #292929; /* Slightly lighter background */
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.comments-container {
+  margin-bottom: 10px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+textarea {
+  border: 1px solid #444444;
+  background-color: #1e1e2e;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 5px;
+  resize: vertical;
+}
+
+textarea::placeholder {
+  color: #aaaaaa;
+}
+
+.comments-section button {
+  background-color: #1e90ff; /* Blue for post comment */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.comments-section button:hover {
+  background-color: #0055cc;
+}
+
+.minter-card p {
+  font-size: 12px;
+  color: gray;
+}
+
+
+
+
