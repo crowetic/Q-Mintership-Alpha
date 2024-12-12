@@ -33,7 +33,7 @@ async function loadMinterBoardPage() {
   mainContent.innerHTML = `
     <div class="minter-board-main" style="padding: 20px; text-align: center;">
       <h1 style="color: lightblue;">Minter Board</h1>
-      <p> The Minter Board is a place to publish information about yourself in order to obtain support from existing Minters and Minter Admins on the Qortal network. You may publish a header, content, and links to other QDN-published content in order to support you in your mission. Minter Admins and Existing Minters will then support you (or not) by way of a vote on your card. Card details you publish, along with existing poll results, and comments from others, will be displayed here. Good Luck on your Qortal journey to becoming a minter!</p>
+      <p style="font-size: 1.25em;"> The Minter Board is a place to publish information about yourself in order to obtain support from existing Minters and Minter Admins on the Qortal network. You may publish a header, content, and links to other QDN-published content in order to support you in your mission. Minter Admins and Existing Minters will then support you (or not) by way of a vote on your card. Card details you publish, along with existing poll results, and comments from others, will be displayed here. Good Luck on your Qortal journey to becoming a minter!</p>
       <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Minter Card</button>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
@@ -389,9 +389,6 @@ const displayComments = async (cardIdentifier) => {
   try {
     const comments = await fetchCommentsForCard(cardIdentifier);
     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`);
-    
-    // Clear previous comments
-    commentsContainer.innerHTML = '';
 
     // Fetch and display each comment
     for (const comment of comments) {
@@ -456,7 +453,6 @@ async function createCardHTML(cardData, pollResults, cardIdentifier) {
   const minterGroupMembers = await fetchMinterGroupMembers();
   const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0 } =
     calculatePollResults(pollResults, minterGroupMembers) || {};
-
 
   return `
   <div class="minter-card">
