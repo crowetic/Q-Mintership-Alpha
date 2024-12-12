@@ -120,8 +120,9 @@ async function fetchExistingCard() {
     const response = await qortalRequest({
       action: "SEARCH_QDN_RESOURCES",
       service: "BLOG_POST",
-      query: userState.accountName, // Scoped to the user
       identifier: cardIdentifierPrefix,
+      name: userState.accountName,
+      exactMatchNames: true //we want to search for the EXACT userName only when finding existing cards.
     });
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
@@ -214,7 +215,7 @@ async function publishCard() {
     return;
   }
 
-  const cardIdentifier = isExistingCard ? existingCardInfo.identifier : `${cardIdentifierPrefix}-${await uid()}`;
+  const cardIdentifier = isExistingCard ? existingCardIdentifier : `${cardIdentifierPrefix}-${await uid()}`;
   const pollName = `${cardIdentifier}-poll`;
   const pollDescription = `Mintership Board Poll for ${userState.accountName}`;
 
