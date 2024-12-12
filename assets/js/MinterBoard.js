@@ -58,8 +58,8 @@ async function loadMinterBoardPage() {
 
   document.getElementById("publish-card-button").addEventListener("click", async () => {
     try {
-      await fetchExistingCard();
-      const cardIdentifier = existingCardIdentifier
+      // await fetchExistingCard();
+      const cardIdentifier = await fetchExistingCard().identifier
       if (cardIdentifier) {
         // Update existing card
         const updateCard = confirm("A card already exists. Do you want to update it?");
