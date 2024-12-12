@@ -1,5 +1,5 @@
-const cardIdentifierPrefix = "test-board-card"
-// const cardIdentifierPrefix = "testMB-board-card";
+// const cardIdentifierPrefix = "test-board-card"
+const cardIdentifierPrefix = "testMB-board-card";
 let isExistingCard = false;
 let existingCardData = {};
 let existingCardIdentifier ={};
