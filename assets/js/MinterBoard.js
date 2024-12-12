@@ -139,21 +139,6 @@ async function fetchExistingCard() {
       // Sort by most recent timestamp
       const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0];
 
-    // Step 3: Find the object with the most recent timestamp
-    // const mostRecentCard = response.reduce((latest, card) => {
-    //   const currentTimestamp = card.created || card.updated || 0; // Ensure there's a timestamp
-    //   const latestTimestamp = latest.created || latest.updated || 0;
-    //   return currentTimestamp > latestTimestamp ? card : latest;
-    // }, {});
-
-    // console.log(`Most recent card found: ${JSON.stringify(mostRecentCard, null, 2)}`);
-
-    // // Step 4: Validate the card and fetch its full data
-    // if (!mostRecentCard.identifier) {
-    //   console.error("Identifier is missing in the most recent card.");
-    //   return null;
-    // }
-
     const cardDataResponse = await qortalRequest({
       action: "FETCH_QDN_RESOURCE",
       name: userState.accountName, // User's account name
@@ -244,16 +229,20 @@ async function publishCard() {
       identifier: cardIdentifier,
       data64: base64CardData,
     });
+    if (!isExistingCard){
+      await qortalRequest({
+        action: "CREATE_POLL",
+        pollName,
+        pollDescription,
+        pollOptions: ['Yes, No'],
+        pollOwnerAddress: userState.accountAddress,
+      });
 
-    await qortalRequest({
-      action: "CREATE_POLL",
-      pollName,
-      pollDescription,
-      pollOptions: ['Yes, No'],
-      pollOwnerAddress: userState.accountAddress,
-    });
-
-    alert("Card and poll published successfully!");
+      alert("Card and poll published successfully!");
+    }
+    if (isExistingCard){
+      alert("Card Updated Successfully! (No poll updates are possible at this time...)")
+    }
     document.getElementById("publish-card-form").reset();
     document.getElementById("publish-card-view").style.display = "none";
     document.getElementById("cards-container").style.display = "flex";
@@ -369,6 +358,7 @@ const postComment = async (cardIdentifier) => {
       identifier: commentIdentifier,
       data64: base64CommentData,
     });
+
     alert('Comment posted successfully!');
     commentInput.value = ''; // Clear input
     await displayComments(cardIdentifier); // Refresh comments
