@@ -44,23 +44,22 @@
 }
   
 .room-button {
-  background-color: #317e78;
+  background-color: #121e30;
   color: #ffffff;
-  border: 2px solid #317e78;
+  border: 2px solid #9dafab;
   border-radius: 2vh;
-  padding: 1vh 2vh;
+  padding: .61vh 2.0vh;
   font-size: 1.1rem;
   cursor: pointer;
 }
   
 .room-button:hover {
-  background-color: #19403d;
+  background-color: #052d46;
 }
 
 .forum-content {
   flex-grow: 1;
   width: 90%;
-  padding: 3vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -607,12 +606,12 @@ body {
   }
 } */
 
-.minter-card {
-  background-color: #1e1e2e; /* Dark background */
+/* .minter-card {
+  background-color: #1e1e2e;
   flex: 1 1 calc(33%); 
-  min-width: 22rem; /* Ensure the card never gets smaller than 15rem */
+  min-width: 22rem; 
   max-width: 22rem;
-  /* max-width: calc(25% - 2rem);  */
+  max-width: calc(25% - 2rem);  
   color: #ffffff;
   border: 1px solid #333;
   border-radius: 12px;
@@ -620,17 +619,38 @@ body {
   min-height: 30vh;
   max-height: auto;
   margin: 1vh;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Soft shadow */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); 
   font-family: 'Arial', sans-serif;
   transition: transform 0.2s ease-in-out;
+} */
+.minter-card{
+  background-color: #1e1e2e;
+  flex: auto;
+  display: flex;
+  min-width: 22rem;
+  /* max-width: 22rem; */
+  max-width: calc(30% - 3rem);
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 1vh;
+  min-height: 30vh;
+  max-height: auto;
+  margin: 1vh;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  font-family: 'Arial', sans-serif;
+  transition: transform 0.2s ease-in-out;
+  flex-direction: column;
+  /* align-content: center; */
+  justify-content: space-between;
+  align-items: stretch;
 }
-
 .minter-card:hover {
   transform: translateY(-5px); /* Slightly lift card on hover */
 }
 
 .minter-card img {
-  margin-left: 42%;
+  margin-left: 43.9%;
 }
 
 .minter-card-header h3 {
@@ -770,6 +790,17 @@ body {
   display: flex;
   max-width: 100%;
   justify-content: space-between;
+}
+
+.actions-buttons {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: stretch;
+  flex-grow: 1;
+  width: 100%;
+  flex-wrap: wrap;
+  align-content: flex-end;
 }
 
 .actions h5{

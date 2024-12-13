@@ -528,7 +528,7 @@ const processLink = async (link) => {
       const remainingPath = match[2] || ""; // Rest of the URL
       // Perform any asynchronous operation if necessary
       await new Promise(resolve => setTimeout(resolve, 10)); // Simulating async operation
-      return `http://localhost:12391/render/${firstParam}${remainingPath}`;
+      return `/render/${firstParam}${remainingPath}`;
     }
   }
   return link; // Return unchanged if not a Qortal link
