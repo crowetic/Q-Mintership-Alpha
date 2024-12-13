@@ -14,7 +14,7 @@ if (localStorage.getItem("latestMessageIdentifiers")) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Identify the link for 'Mintership Forum'
+  // Identify the links for 'Mintership Forum' and apply functionality
   const mintershipForumLinks = document.querySelectorAll('a[href="MINTERSHIP-FORUM"]');
 
   mintershipForumLinks.forEach(link => {
@@ -31,14 +31,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-async function loadForumPage() {
-  // // Remove all sections except the menu
-  // const allSections = document.querySelectorAll('body > section');
-  // allSections.forEach(section => {
-  //   if (!section.classList.contains('menu')) {
-  //     section.remove();
-  //   }
-  // });
+// Main load function to clear existing HTML and load the forum page -----------------------------------------------------
+const loadForumPage = async () => {
+  // remove everything that isn't the menu from the body to use js to generate page content. 
   const bodyChildren = document.body.children;
     for (let i = bodyChildren.length - 1; i >= 0; i--) {
         const child = bodyChildren[i];
@@ -89,7 +84,8 @@ async function loadForumPage() {
   });
 }
 
-async function renderPaginationControls(room, totalMessages, limit) {
+// Function to add the pagination buttons and related control mechanisms ------------------------
+const renderPaginationControls = async(room, totalMessages, limit) => {
   const paginationContainer = document.getElementById("pagination-container");
   if (!paginationContainer) return;
 
@@ -138,9 +134,8 @@ async function renderPaginationControls(room, totalMessages, limit) {
   }
 }
 
-
-
-async function loadRoomContent(room) {
+// Main function to load the full content of the room, along with all main functionality -----------------------------------
+const loadRoomContent = async (room) => {
   const forumContent = document.getElementById("forum-content");
   if (forumContent) {
     forumContent.innerHTML = `
@@ -153,9 +148,13 @@ async function loadRoomContent(room) {
           <div id="editor" class="message-input"></div>
           <div class="attachment-section">
             <input type="file" id="file-input" class="file-input" multiple>
-            <button id="attach-button" class="attach-button">Attach Files</button>
+            <label for="file-input" class="custom-file-input-button">Select Files</label>
+            <input type="file" id="image-input" class="image-input" multiple accept="image/*">
+            <label for="image-input" class="custom-image-input-button">Select IMAGES w/Preview</label>
+            <button id="add-images-to-publish-button" disabled>Add Images to Multi-Publish</button>
+            <div id="preview-container" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
           </div>
-          <button id="send-button" class="send-button">Send</button>
+          <button id="send-button" class="send-button">Publish</button>
         </div>
       </div>
     `;
@@ -191,7 +190,7 @@ async function loadRoomContent(room) {
     // Load messages from QDN for the selected room
     await loadMessagesFromQDN(room, currentPage);
 
-    document.addEventListener("click", (event) => {
+    document.addEventListener("click", async (event) => {
       if (event.target.classList.contains("inline-image")) {
         const modal = document.getElementById("image-modal");
         const modalImage = document.getElementById("modal-image");
@@ -202,75 +201,189 @@ async function loadRoomContent(room) {
         modalImage.src = event.target.src;
         caption.textContent = event.target.alt;
     
-        // Set download button link - This has been moved to the Message Rendering Section of the code.
-        // downloadButton.onclick = () => {
-        //   fetchAndSaveAttachment(
-        //     "FILE",
-        //     event.target.dataset.name,
-        //     event.target.dataset.identifier,
-        //     event.target.dataset.filename,
-        //     event.target.dataset.mimeType
-        //   );
-        // };
-    
         // Show the modal
         modal.style.display = "block";
       }
     });
     
     // Close the modal
-    document.getElementById("close-modal").addEventListener("click", () => {
+    document.getElementById("close-modal").addEventListener("click", async () => {
       document.getElementById("image-modal").style.display = "none";
     });
     
     // Hide the modal when clicking outside of the image or close button
-    window.addEventListener("click", (event) => {
+    window.addEventListener("click", async (event) => {
       const modal = document.getElementById("image-modal");
-      if (event.target == modal) {
+      if (!event.target == modal) {
         modal.style.display = "none";
       }
     });
   
 
     let selectedFiles = [];
-  
-    // Add event listener to handle file selection
-    document.getElementById('file-input').addEventListener('change', (event) => {
-      selectedFiles = Array.from(event.target.files);
+    let selectedImages = [];
+    let attachmentIdentifiers = [];
+    let multiResource = []
+
+    const imageFileInput = document.getElementById('image-input');
+    const previewContainer = document.getElementById('preview-container');
+    const addToPublishButton = document.getElementById('add-images-to-publish-button')
+    const randomID = await uid();
+    const attachmentID = `${messageAttachmentIdentifierPrefix}-${room}-${randomID}`;
+
+    imageFileInput.addEventListener('change', async (event) => {
+      // Clear previous previews to prepare for preview generation
+      previewContainer.innerHTML = '';
+      selectedImages = Array.from(event.target.files);
+
+      if (selectedImages.length > 0) {
+        addToPublishButton.disabled = false;
+      }
+
+      selectedImages.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = document.createElement('img');
+          img.src = reader.result;
+          img.alt = file.name;
+          img.style.width = '100px';
+          img.style.height = '100px';
+          img.style.objectFit = 'cover';
+          img.style.border = '1px solid #ccc';
+          img.style.borderRadius = '5px';
+
+          // Add remove button
+          const removeButton = document.createElement('button');
+          removeButton.innerText = 'Remove';
+          removeButton.style.marginTop = '5px';
+          removeButton.onclick = () => {
+            selectedImages.splice(index, 1);
+            img.remove();
+            removeButton.remove();
+            if (selectedImages.length === 0) {
+              addToPublishButton.disabled = true;
+            }
+          };
+
+          const container = document.createElement('div');
+          container.style.display = 'flex';
+          container.style.flexDirection = 'column';
+          container.style.alignItems = 'center';
+          container.style.margin = '5px';
+          container.appendChild(img);
+          container.appendChild(removeButton);
+          previewContainer.appendChild(container);
+        };
+        reader.readAsDataURL(file);
+      });
     });
 
-    // Add event listener for the send button
+    addToPublishButton.addEventListener('click', async () => {
+      await addImagesToMultiPublish()
+    })
+
+    // Function to add images in the preview to the multi-publish object --------------------------
+    const addImagesToMultiPublish = async () => {
+      console.log('Adding Images to multi-publish:', selectedImages);
+      for (let i = 0; i < selectedImages.length; i++) {
+        const file = selectedImages[i];
+        try {
+          multiResource.push({
+            name: userState.accountName,
+            service: "FILE",
+            identifier: attachmentID,
+            file: file,
+          });
+      
+          attachmentIdentifiers.push({
+            name: userState.accountName,
+            service: "FILE",
+            identifier: attachmentID,
+            filename: file.name,
+            mimeType: file.type
+          });
+      
+          console.log(`Attachment ${file.name} placed into multiResource with attachmentID: ${attachmentID}`);
+      
+          // Remove the processed file
+          selectedImages.splice(i, 1);
+          i--; // Adjust the index since we removed an item
+          
+        } catch (error) {
+          console.error(`Error processing attachment ${file.name}:`, error);
+        }
+      }
+      selectedImages = []
+      addToPublishButton.disabled = true
+    }
+
+    // Add event listener to handle file selection
+    document.getElementById('file-input').addEventListener('change', async (event) => {
+      selectedFiles = Array.from(event.target.files);
+    });
+    // Add event listener for the PUBLISH button
     document.getElementById("send-button").addEventListener("click", async () => {
       const messageHtml = quill.root.innerHTML.trim();
-      if (messageHtml !== "" || selectedFiles.length > 0) {
-        const randomID = await uid();
+      if (messageHtml !== "" || selectedFiles.length > 0 || selectedImages.length > 0) {
         const messageIdentifier = `${messageIdentifierPrefix}-${room}-${randomID}`;
-        let attachmentIdentifiers = [];
-    
-        // Handle attachments
-        for (const file of selectedFiles) {
-          const attachmentID = `${messageAttachmentIdentifierPrefix}-${room}-${randomID}`;
-          try {
-            await qortalRequest({
-              action: "PUBLISH_QDN_RESOURCE",
-              name: userState.accountName,
-              service: "FILE",
-              identifier: attachmentID,
-              file: file,
-            });
-            attachmentIdentifiers.push({
-              name: userState.accountName,
-              service: "FILE",
-              identifier: attachmentID,
-              filename: file.name,
-              mimeType: file.type
-            });
-            console.log(`Attachment ${file.name} published successfully with ID: ${attachmentID}`);
-          } catch (error) {
-            console.error(`Error publishing attachment ${file.name}:`, error);
+
+        if (selectedImages.length > 0) {
+          await addImagesToMultiPublish()
+        }
+        if (selectedFiles.length === 1) {
+          console.log(`single file has been detected, attaching single file...`)
+          const singleAttachment = selectedFiles[0]
+          
+          multiResource.push({
+            name: userState.accountName,
+            service: "FILE",
+            identifier: attachmentID,
+            file: singleAttachment
+          })
+
+          attachmentIdentifiers.push({
+            name: userState.accountName,
+            service: "FILE",
+            identifier: attachmentID,
+            filename: singleAttachment.name,
+            filetype: singleAttachement.type
+          })
+          // Clear selectedFiles as we do not need them anymore.
+          document.getElementById('file-input').value = "";
+          selectedFiles = [];
+
+        }else if (selectedFiles.length >= 2) {
+          console.log(`selected files found: ${selectedFiles.length}, adding multiple files to multi-publish resource...`)
+        // Handle Multiple attachements utilizing multi-publish
+          for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
+            try {
+              multiResource.push({
+                name: userState.accountName,
+                service: "FILE",
+                identifier: attachmentID,
+                file: file,
+              });
+          
+              attachmentIdentifiers.push({
+                name: userState.accountName,
+                service: "FILE",
+                identifier: attachmentID,
+                filename: file.name,
+                mimeType: file.type
+              });
+          
+              console.log(`Attachment ${file.name} placed into multiResource with attachmentID: ${attachmentID}`);
+          
+              // Remove the processed file
+              selectedFiles.splice(i, 1);
+              i--; // Adjust the index since we removed an item
+            } catch (error) {
+              console.error(`Error processing attachment ${file.name}:`, error);
+            }
           }
         }
-
+      
         // Create message object with unique identifier, HTML content, and attachments
         const messageObject = {
           messageHtml: messageHtml,
@@ -278,7 +391,7 @@ async function loadRoomContent(room) {
           attachments: attachmentIdentifiers,
           replyTo: replyToMessageIdentifier
         };
-    
+      
         try {
           // Convert message object to base64
           let base64Message = await objectToBase64(messageObject);
@@ -287,21 +400,24 @@ async function loadRoomContent(room) {
             base64Message = btoa(JSON.stringify(messageObject));
           }
     
-          // Publish message to QDN
-          await qortalRequest({
-            action: "PUBLISH_QDN_RESOURCE",
+          // Put the message into the multiResource for batch-publishing.
+          multiResource.push({
             name: userState.accountName,
             service: "BLOG_POST",
             identifier: messageIdentifier,
             data64: base64Message
           });
     
-          console.log("Message published successfully");
+          console.log("Message added to multi-publish resource successfully, attempting multi-publish... ");
+
+          await publishMultipleResources(multiResource)
         
           // Clear the editor after sending the message, including any potential attached files and replies.
           quill.root.innerHTML = "";
           document.getElementById('file-input').value = "";
           selectedFiles = [];
+          selectedImages = [];
+          multiResource = [];
           replyToMessageIdentifier = null;
           const replyContainer = document.querySelector(".reply-container");
           if (replyContainer) {
@@ -310,33 +426,24 @@ async function loadRoomContent(room) {
 
           // Show success notification
           const notification = document.createElement('div');
-          notification.innerText = "Message published successfully! Message will take a confirmation to show.";
+          notification.innerText = "Message published successfully! Message will take a confirmation to show, please be patient...";
           notification.style.color = "green";
-          notification.style.marginTop = "10px";
+          notification.style.marginTop = "1em";
           document.querySelector(".message-input-section").appendChild(notification);
 
           setTimeout(() => {
             notification.remove();
-          }, 3000);
+          }, 10000);
 
         } catch (error) {
           console.error("Error publishing message:", error);
         }
       }
-    });
-    // Add event listener for the load more button
-    const loadMoreContainer = document.getElementById("load-more-container");
-    if (loadMoreContainer) {
-      loadMoreContainer.innerHTML = '<button id="load-more-button" class="load-more-button" style="margin-top: 10px;">Load More</button>';
-      document.getElementById("load-more-button").addEventListener("click", () => {
-        currentPage++;
-        loadMessagesFromQDN(room, currentPage);
-    });
-    }
+    })
   }
 }
 
-async function loadMessagesFromQDN(room, page, isPolling = false) {
+const loadMessagesFromQDN = async (room, page, isPolling = false) => {
   try {
     const limit = 10;
     const offset = page * limit;

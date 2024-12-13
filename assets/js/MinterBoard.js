@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-async function loadMinterBoardPage() {
+const loadMinterBoardPage = async () => {
   // Clear existing content on the page
   const bodyChildren = document.body.children;
   for (let i = bodyChildren.length - 1; i >= 0; i--) {
@@ -67,7 +67,7 @@ async function loadMinterBoardPage() {
 
         if (updateCard) {
           // Load existing card into the form for editing
-          loadCardIntoForm(existingCardData);
+          await loadCardIntoForm(existingCardData);
           alert("Edit your existing card and publish.");
         } else {
           // Allow creating a new card for testing purposes
@@ -91,14 +91,14 @@ async function loadMinterBoardPage() {
     }
   });
 
-  document.getElementById("cancel-publish-button").addEventListener("click", () => {
+  document.getElementById("cancel-publish-button").addEventListener("click", async () => {
     const cardsContainer = document.getElementById("cards-container");
     cardsContainer.style.display = "flex"; // Restore visibility
     const publishCardView = document.getElementById("publish-card-view");
     publishCardView.style.display = "none"; // Hide the publish form
   });
 
-  document.getElementById("add-link-button").addEventListener("click", () => {
+  document.getElementById("add-link-button").addEventListener("click", async () => {
     const linksContainer = document.getElementById("links-container");
     const newLinkInput = document.createElement("input");
     newLinkInput.type = "text";
@@ -115,7 +115,75 @@ async function loadMinterBoardPage() {
   await loadCards();
 }
 
-async function fetchExistingCard() {
+//Main function to load the Minter Cards ----------------------------------------
+const loadCards = async () => {
+  const cardsContainer = document.getElementById("cards-container");
+  cardsContainer.innerHTML = "<p>Loading cards...</p>";
+
+  try {
+    const response = await qortalRequest({
+      action: "SEARCH_QDN_RESOURCES",
+      service: "BLOG_POST",
+      query: cardIdentifierPrefix,
+      mode: "ALL"
+    });
+
+    if (!response || !Array.isArray(response) || response.length === 0) {
+      cardsContainer.innerHTML = "<p>No cards found.</p>";
+      return;
+    }
+
+    const validatedCards = await Promise.all(
+      response.map(async card => {
+        console.log("Validating card:", card);
+        const isValid = await validateCardStructure(card);
+        return isValid ? card : null;
+      })
+    );
+
+    const validCards = validatedCards.filter(card => card !== null);
+    cardsContainer.innerHTML = "";
+
+    if (validCards.length === 0) {
+      cardsContainer.innerHTML = "<p>No valid cards found.</p>";
+      return;
+    }
+
+    await Promise.all(
+      validCards.map(async card => {
+        try {
+          const cardDataResponse = await qortalRequest({
+            action: "FETCH_QDN_RESOURCE",
+            name: card.name,
+            service: "BLOG_POST",
+            identifier: card.identifier,
+          });
+
+          const cardData = cardDataResponse;
+          if (!cardData || !cardData.poll) {
+            console.warn(`Skipping card with missing poll data: ${JSON.stringify(cardData)}`);
+            return;
+          }
+
+          const pollResults = await fetchPollResults(cardData.poll);
+          console.log(`Poll Results Fetched - totalVotes: ${pollResults.totalVotes}`);
+
+          const cardHTML = await createCardHTML(cardData, pollResults, card.identifier);
+          cardsContainer.insertAdjacentHTML("beforeend", cardHTML);
+        } catch (error) {
+          console.error(`Error processing card ${card.identifier}:`, error);
+        }
+      })
+    );
+  } catch (error) {
+    console.error("Error loading cards:", error);
+    cardsContainer.innerHTML = "<p>Failed to load cards.</p>";
+  }
+};
+
+
+// Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
+const fetchExistingCard = async () => {
   try {
     // Step 1: Perform the search
     const response = await qortalRequest({
@@ -123,7 +191,8 @@ async function fetchExistingCard() {
       service: "BLOG_POST",
       identifier: cardIdentifierPrefix,
       name: userState.accountName,
-      exactMatchNames: true //we want to search for the EXACT userName only when finding existing cards.
+      mode: "ALL",
+      exactMatchNames: true // Search for the exact userName only when finding existing cards
     });
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
@@ -134,37 +203,48 @@ async function fetchExistingCard() {
       return null;
     }
 
-    const validCards = response.filter(card => validateCardStructure(card));
+    // Step 3: Validate cards asynchronously
+    const validatedCards = await Promise.all(
+      response.map(async card => {
+        const isValid = await validateCardStructure(card);
+        return isValid ? card : null;
+      })
+    );
+
+    // Step 4: Filter out invalid cards
+    const validCards = validatedCards.filter(card => card !== null);
 
     if (validCards.length > 0) {
-      // Sort by most recent timestamp
+      // Step 5: Sort by most recent timestamp
       const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0];
 
-    const cardDataResponse = await qortalRequest({
-      action: "FETCH_QDN_RESOURCE",
-      name: userState.accountName, // User's account name
-      service: "BLOG_POST",
-      identifier: mostRecentCard.identifier,
-    });
-    
-    existingCardIdentifier = mostRecentCard.identifier
-    existingCardData = cardDataResponse
+      // Step 6: Fetch full card data
+      const cardDataResponse = await qortalRequest({
+        action: "FETCH_QDN_RESOURCE",
+        name: userState.accountName, // User's account name
+        service: "BLOG_POST",
+        identifier: mostRecentCard.identifier
+      });
 
-    console.log("Full card data fetched successfully:", cardDataResponse);
+      existingCardIdentifier = mostRecentCard.identifier;
+      existingCardData = cardDataResponse;
 
-    return cardDataResponse; // Return full card data
-  }
+      console.log("Full card data fetched successfully:", cardDataResponse);
 
-  console.log("No valid cards found.");
+      return cardDataResponse;
+    }
+
+    console.log("No valid cards found.");
     return null;
-
   } catch (error) {
     console.error("Error fetching existing card:", error);
     return null;
   }
-}
+};
 
-const validateCardStructure = (card) => {
+
+// Validate that a card is indeed a card and not a comment. -------------------------------------
+const validateCardStructure = async (card) => {
   return (
     typeof card === "object" &&
     card.name &&
@@ -174,7 +254,9 @@ const validateCardStructure = (card) => {
   );
 }
 
-function loadCardIntoForm(cardData) {
+// Load existing card data passed, into the form for editing -------------------------------------
+const loadCardIntoForm = async (cardData) => {
+  console.log("Loading existing card data:", cardData);
   document.getElementById("card-header").value = cardData.header;
   document.getElementById("card-content").value = cardData.content;
 
@@ -189,7 +271,8 @@ function loadCardIntoForm(cardData) {
   });
 }
 
-async function publishCard() {
+// Main function to publish a new Minter Card -----------------------------------------------
+const publishCard = async () => {
   const header = document.getElementById("card-header").value.trim();
   const content = document.getElementById("card-content").value.trim();
   const links = Array.from(document.querySelectorAll(".card-link"))
@@ -213,7 +296,7 @@ async function publishCard() {
     timestamp: Date.now(),
     poll: pollName,
   };
-  // new Date().toISOString()
+  
   try {
 
     let base64CardData = await objectToBase64(cardData);
@@ -221,7 +304,6 @@ async function publishCard() {
         console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`);
         base64CardData = btoa(JSON.stringify(cardData));
       }
-    // const base64CardData = btoa(JSON.stringify(cardData));
     
     await qortalRequest({
       action: "PUBLISH_QDN_RESOURCE",
@@ -254,83 +336,45 @@ async function publishCard() {
   }
 }
 
-async function loadCards() {
-  const cardsContainer = document.getElementById("cards-container");
-  cardsContainer.innerHTML = "<p>Loading cards...</p>";
+//Calculate the poll results passed from other functions with minterGroupMembers and minterAdmins ---------------------------
+const calculatePollResults = async (pollData, minterGroupMembers, minterAdmins) => {
+  const memberAddresses = minterGroupMembers.map(member => member.member)
+  const adminAddresses = minterAdmins.map(member => member.member)
 
-  try {
-    const response = await qortalRequest({
-      action: "SEARCH_QDN_RESOURCES",
-      service: "BLOG_POST",
-      query: cardIdentifierPrefix,
-    });
+  let adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, yesWeight = 0 , noWeight = 0
 
-    if (!response || response.length === 0) {
-      cardsContainer.innerHTML = "<p>No cards found.</p>";
-      return;
+  pollData.voteWeights.forEach(weightData => {
+    if (weightData.optionName === 'Yes') {
+      yesWeight = weightData.voteWeight
+    } else if (weightData.optionName === 'No') {
+      noWeight = weightData.voteWeight
     }
+  })
 
-    cardsContainer.innerHTML = ""
-    const pollResultsCache = {};
-
-    const validCards = response.filter(card => validateCardStructure(card));
-
-    for (const card of validCards) {
-      const cardDataResponse = await qortalRequest({
-        action: "FETCH_QDN_RESOURCE",
-        name: card.name,
-        service: "BLOG_POST",
-        identifier: card.identifier,
-      });
-
-      const cardData = cardDataResponse;
-      
-      if (!cardData || !cardData.poll) {
-        console.warn(`Skipping card with missing poll data: ${JSON.stringify(cardData)}`);
-        continue; // Skip to the next card
-      }
-
-      // Cache poll results
-      if (!pollResultsCache[cardData.poll]) {
-        try {
-          pollResultsCache[cardData.poll] = await fetchPollResults(cardData.poll);
-        } catch (error) {
-          console.warn(`Failed to fetch poll results for poll: ${cardData.poll}`, error);
-          pollResultsCache[cardData.poll] = null; // Store as null to avoid repeated attempts
-        }
-      }
-
-      const pollResults = pollResultsCache[cardData.poll];
-      const cardHTML = await createCardHTML(cardData, pollResults, card.identifier);
-      cardsContainer.insertAdjacentHTML("beforeend", cardHTML);
-    }
-  } catch (error) {
-    console.error("Error loading cards:", error);
-    cardsContainer.innerHTML = "<p>Failed to load cards.</p>";
-  }
-}
-
-const calculatePollResults = (pollData, minterGroupMembers) => {
-  const memberAddresses = minterGroupMembers.map(member => member.member);
-  let adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0;
-
-  pollData.votes.forEach(vote => {
-    const voterAddress = getAddressFromPublicKey(vote.voterPublicKey);
-    const isAdmin = minterGroupMembers.some(member => member.member === voterAddress && member.isAdmin);
+  for (const vote of pollData.votes) {
+    const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey)
+    console.log(`voter address: ${voterAddress}`)
 
     if (vote.optionIndex === 0) {
-      isAdmin ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : null;
+      adminAddresses.includes(voterAddress) ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
     } else if (vote.optionIndex === 1) {
-      isAdmin ? adminNo++ : memberAddresses.includes(voterAddress) ? minterNo++ : null;
+      adminAddresses.includes(voterAddress) ? adminNo++ : memberAddresses.includes(voterAddress) ? minterNo++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
     }
-  });
+  }
 
-  const totalYes = adminYes + minterYes;
-  const totalNo = adminNo + minterNo;
+  // TODO - create a new function to calculate the weights of each voting MINTER only. 
+  // This will give ALL weight whether voter is in minter group or not... 
+  // until that is changed on the core we must calculate manually. 
+  const totalYesWeight = yesWeight
+  const totalNoWeight = noWeight
 
-  return { adminYes, adminNo, minterYes, minterNo, totalYes, totalNo };
-};
+  const totalYes = adminYes + minterYes
+  const totalNo = adminNo + minterNo
 
+  return { adminYes, adminNo, minterYes, minterNo, totalYes, totalNo, totalYesWeight, totalNoWeight }
+}
+
+// Post a comment on a card. ---------------------------------
 const postComment = async (cardIdentifier) => {
   const commentInput = document.getElementById(`new-comment-${cardIdentifier}`);
   const commentText = commentInput.value.trim();
@@ -353,7 +397,7 @@ const postComment = async (cardIdentifier) => {
         console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`);
         base64CommentData = btoa(JSON.stringify(commentData));
       }
-    // const base64CommentData = btoa(JSON.stringify(commentData));
+   
     await qortalRequest({
       action: 'PUBLISH_QDN_RESOURCE',
       name: userState.accountName,
@@ -371,12 +415,14 @@ const postComment = async (cardIdentifier) => {
   }
 };
 
+//Fetch the comments for a card with passed card identifier ----------------------------
 const fetchCommentsForCard = async (cardIdentifier) => {
   try {
     const response = await qortalRequest({
       action: 'SEARCH_QDN_RESOURCES',
       service: 'BLOG_POST',
       query: `comment-${cardIdentifier}`,
+      mode: "ALL"
     });
     return response;
   } catch (error) {
@@ -385,6 +431,7 @@ const fetchCommentsForCard = async (cardIdentifier) => {
   }
 };
 
+// display the comments on the card, with passed cardIdentifier to identify the card --------------
 const displayComments = async (cardIdentifier) => {
   try {
     const comments = await fetchCommentsForCard(cardIdentifier);
@@ -399,6 +446,7 @@ const displayComments = async (cardIdentifier) => {
         identifier: comment.identifier,
       });
       const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp);
+      //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
       const commentHTML = `
         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
           <p><strong><u>${commentDataResponse.creator}</strong>:</p></u>
@@ -414,6 +462,7 @@ const displayComments = async (cardIdentifier) => {
   }
 };
 
+// Vote YES on a poll ------------------------------
 const voteYesOnPoll = async (poll) => {
   await qortalRequest({
     action: "VOTE_ON_POLL",
@@ -422,6 +471,7 @@ const voteYesOnPoll = async (poll) => {
   });
 }
 
+// Vote NO on a poll -----------------------------
 const voteNoOnPoll = async (poll) => {
   await qortalRequest({
     action: "VOTE_ON_POLL",
@@ -430,6 +480,7 @@ const voteNoOnPoll = async (poll) => {
   });
 }
 
+// Toggle comments from being shown or not, with passed cardIdentifier for comments being toggled --------------------
 const toggleComments = async (cardIdentifier) => {
   const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`);
   if (commentsSection.style.display === 'none' || !commentsSection.style.display) {
@@ -440,20 +491,58 @@ const toggleComments = async (cardIdentifier) => {
   }
 };
 
-async function createCardHTML(cardData, pollResults, cardIdentifier) {
+const createModal = async () => {
+  const modalHTML = `
+    <div id="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000;">
+      <div style="position: relative; margin: 5% auto; width: 90%; height: 90%; background: white; border-radius: 10px; overflow: hidden;">
+        <iframe id="modalContent" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+        <button onclick="closeModal()" style="position: absolute; top: 10px; right: 10px; background: red; color: white; border: none; padding: 5px 10px; border-radius: 5px;">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+// Function to open the modal
+const openModal = async (link) => {
+  const processedLink = await processLink(link) // Process the link to replace `qortal://` for rendering in modal
+  const modal = document.getElementById('modal');
+  const modalContent = document.getElementById('modalContent');
+  modalContent.src = processedLink; // Set the iframe source to the link
+  modal.style.display = 'block'; // Show the modal
+}
+
+// Function to close the modal
+const closeModal = async () => {
+  const modal = document.getElementById('modal');
+  const modalContent = document.getElementById('modalContent');
+  modal.style.display = 'none'; // Hide the modal
+  modalContent.src = ''; // Clear the iframe source
+}
+
+const processLink = async (link) => {
+  if (link.startsWith('qortal://')) {
+    return link.replace('qortal://', '/render/')
+  }
+  return link // Return the link unchanged if it doesn't start with `qortal://`
+}
+
+
+// Create the overall Minter Card HTML -----------------------------------------------
+const createCardHTML = async (cardData, pollResults, cardIdentifier) => {
   const { header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = new Date(timestamp).toLocaleString();
   const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
   const linksHTML = links.map((link, index) => `
-    <button onclick="window.open('${link}', '_blank')">
+    <button onclick="openModal('${link}')">
       ${`Link ${index + 1} - ${link}`}
     </button>
   `).join("");
 
   const minterGroupMembers = await fetchMinterGroupMembers();
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0 } =
-    calculatePollResults(pollResults, minterGroupMembers) || {};
-
+  const minterAdmins = await fetchMinterGroupAdmins();
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0 } = await calculatePollResults(pollResults, minterGroupMembers, minterAdmins)
+  await createModal()
   return `
   <div class="minter-card">
     <div class="minter-card-header">

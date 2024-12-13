@@ -130,23 +130,38 @@ const verifyUserIsAdmin = async () => {
     try {
         const accountAddress = userState.accountAddress || await getUserAddress();
         userState.accountAddress = accountAddress;
+        
         const userGroups = await getUserGroups(accountAddress);
+        console.log('userGroups:', userGroups);
+        
         const minterGroupAdmins = await fetchMinterGroupAdmins();
-        const isAdmin = await userGroups.some(group => adminGroups.includes(group.groupName))
-        const isMinterAdmin = minterGroupAdmins.members.some(admin => admin.member === userState.accountAddress && admin.isAdmin)
+        console.log('minterGroupAdmins.members:', minterGroupAdmins);
+        
+        if (!Array.isArray(userGroups)) {
+            throw new Error('userGroups is not an array or is undefined');
+        }
+        
+        if (!Array.isArray(minterGroupAdmins)) {
+            throw new Error('minterGroupAdmins.members is not an array or is undefined');
+        }
+        
+        const isAdmin = userGroups.some(group => adminGroups.includes(group.groupName));
+        const isMinterAdmin = minterGroupAdmins.some(admin => admin.member === userState.accountAddress && admin.isAdmin);
+        
         if (isMinterAdmin) {
-            userState.isMinterAdmin = true
+            userState.isMinterAdmin = true;
         }
         if (isAdmin) {
             userState.isAdmin = true;
-            userState.isForumAdmin = true
-         }
+            userState.isForumAdmin = true;
+        }
         return userState.isAdmin;
     } catch (error) {
         console.error('Error verifying user admin status:', error);
         throw error;
     }
 };
+
 
 const verifyAddressIsAdmin = async (address) => {
     console.log('verifyAddressIsAdmin called');
@@ -234,8 +249,7 @@ const getAddressFromPublicKey = async (publicKey) => {
             method: 'GET',
             headers: { 'Accept': 'text/plain' }  
         });
-        const data = await response.text();
-        const address = data;
+        const address = await response.text();
         console.log('Converted Address:', address);
         return address;
     } catch (error) {
@@ -290,7 +304,7 @@ try {
 };
 
 
-// QORTAL GROUP-RELATED CALLS ------------------------------------------
+// QORTAL GROUP-RELATED CALLS ------------------------------------------------------------------------------------
 const getUserGroups = async (userAddress) => {
     console.log('getUserGroups called');
     console.log('userAddress:', userAddress);
@@ -319,8 +333,15 @@ const fetchMinterGroupAdmins = async () => {
         headers: { 'Accept': 'application/json' }
     });
     const admins = await response.json();
+
+    if (!Array.isArray(admins.members)) {
+        throw new Error("Expected 'members' to be an array but got a different structure");
+      }
+
+    const adminMembers = admins.members
     console.log('Fetched minter admins', admins);
-    return admins;
+    return adminMembers;
+    //use what is returned .member to obtain each member... {"member": "memberAddress", "isAdmin": "true"}
 }
 
 const fetchMinterGroupMembers = async () => {
@@ -340,15 +361,16 @@ const fetchMinterGroupMembers = async () => {
       if (!Array.isArray(data.members)) {
         throw new Error("Expected 'members' to be an array but got a different structure");
       }
-  
-      return data.members; // Assuming 'members' is the key in the response JSON
+      
+      console.log(`MinterGroupMembers have been fetched.`)
+      return data.members; 
+
+       //use what is returned .member to obtain each member... {"member": "memberAddress", "joined": "{timestamp}"}
     } catch (error) {
       console.error("Error fetching minter group members:", error);
       return []; // Return an empty array to prevent further errors
     }
   };
-  
-  
   
 
 const fetchAllGroups = async (limit) => {
