@@ -11,9 +11,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 // Verify admin status and hide/show buttons
 if (await isAdmin()) {
     document.addEventListener("DOMContentLoaded", async () => {
-        const minterBoardLinks = document.querySelectorAll('a[href="MINTER-DATA-BOARD"], a[href="DATA-BOARD"]');
+        const minterDataBoardLinks = document.querySelectorAll('a[href="DATA-BOARD"]');
         
-        minterBoardLinks.forEach(link => {
+        minterDataBoardLinks.forEach(link => {
             link.addEventListener("click", async (event) => {
             event.preventDefault();
             if (!userState.isLoggedIn) {
