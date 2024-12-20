@@ -645,31 +645,53 @@ const searchAllWithOffset = async (service, query, limit, offset, room) => {
   };
   
 
-const searchAllCountOnly = async (query) => {
+const searchAllCountOnly = async (query, room) => {
     try {
       let offset = 0;
       const limit = 100; // Chunk size for fetching
       let totalCount = 0;
       let hasMore = true;
-  
+
+      if (room === "admins") {
+        while (hasMore) {
+            const response = await qortalRequest({
+              action: "SEARCH_QDN_RESOURCES",
+              service: "MAIL_PRIVATE",
+              query: query,
+              limit: limit,
+              offset: offset,
+              mode: "ALL",
+              reverse: false
+            });
+      
+            if (response && response.length > 0) {
+              totalCount += response.length;
+              offset = totalCount;
+              console.log(`Fetched ${response.length} items, total count: ${totalCount}, current offset: ${offset}`);
+            } else {
+              hasMore = false;
+            }
+          }
+      }else {
       // Fetch in chunks to accumulate the count
-      while (hasMore) {
-        const response = await qortalRequest({
-          action: "SEARCH_QDN_RESOURCES",
-          service: "BLOG_POST",
-          query: query,
-          limit: limit,
-          offset: offset,
-          mode: "ALL",
-          reverse: false
-        });
-  
-        if (response && response.length > 0) {
-          totalCount += response.length;
-          offset += limit;
-          console.log(`Fetched ${response.length} items, total count: ${totalCount}, current offset: ${offset}`);
-        } else {
-          hasMore = false;
+        while (hasMore) {
+            const response = await qortalRequest({
+            action: "SEARCH_QDN_RESOURCES",
+            service: "BLOG_POST",
+            query: query,
+            limit: limit,
+            offset: offset,
+            mode: "ALL",
+            reverse: false
+            });
+    
+            if (response && response.length > 0) {
+            totalCount += response.length;
+            offset = totalCount;
+            console.log(`Fetched ${response.length} items, total count: ${totalCount}, current offset: ${offset}`);
+            } else {
+            hasMore = false;
+            }
         }
       }
   

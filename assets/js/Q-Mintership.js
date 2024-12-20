@@ -554,281 +554,330 @@ const generateAttachmentID = (room, fileIndex = null) => {
   return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID;
 };
 
-const decryptFile = async (encryptedData) => {
-  const publicKey = await getPublicKeyByName(userState.accountName)
-  const response = await qortalRequest({
-    action: 'DECRYPT_DATA',
-    encryptedData, // has to be in base64 format
-    // publicKey: publicKey  // requires the public key of the opposite user with whom you've created the encrypted data.
-  });
-  const decryptedObject = response
-  return decryptedObject
-}
+// const decryptFile = async (encryptedData) => {
+//   const publicKey = await getPublicKeyByName(userState.accountName)
+//   const response = await qortalRequest({
+//     action: 'DECRYPT_DATA',
+//     encryptedData, // has to be in base64 format
+//     // publicKey: publicKey  // requires the public key of the opposite user with whom you've created the encrypted data.
+//   });
+//   const decryptedObject = response
+//   return decryptedObject
+// }
 
+// --- REFACTORED LOAD MESSAGES AND HELPER FUNCTIONS ---
 
 const loadMessagesFromQDN = async (room, page, isPolling = false) => {
   try {
     const limit = 10;
     const offset = page * limit;
-    console.log(`Loading messages for room: ${room}, page: ${page}, offset: ${offset}, limit: ${limit}`);
+    console.log(`Loading messages from QDN: room=${room}, page=${page}, offset=${offset}, limit=${limit}`);
 
-    // Get the messages container
     const messagesContainer = document.querySelector("#messages-container");
     if (!messagesContainer) return;
 
-    // If not polling, clear the message container and the existing identifiers for a fresh load
-    if (!isPolling) {
-      messagesContainer.innerHTML = ""; // Clear the messages container before loading new page
-      existingIdentifiers.clear(); // Clear the existing identifiers set for fresh page load
-    }
+    prepareMessageContainer(messagesContainer, isPolling);
 
-    // Get the set of existing identifiers from the messages container
-    existingIdentifiers = new Set(Array.from(messagesContainer.querySelectorAll('.message-item')).map(item => item.dataset.identifier));
+    const { service, query } = getServiceAndQuery(room);
+    const response = await fetchResourceList(service, query, limit, offset, room);
 
-    // Fetch messages for the current room and page
-    const service = room === "admins" ? "MAIL_PRIVATE" : "BLOG_POST"
-    const query = room === "admins" ? `${messageIdentifierPrefix}-${room}-e` : `${messageIdentifierPrefix}-${room}`
-    
-    const response = await searchAllWithOffset(service, query, limit, offset, room);
-    console.log(`Fetched messages count: ${response.length} for page: ${page}`);
+    console.log(`Fetched ${response.length} message(s) for page ${page}.`);
 
-    if (response.length === 0) {
-      // If no messages are fetched and it's not polling, display "no messages" for the initial load
-      if (page === 0 && !isPolling) {
-        messagesContainer.innerHTML = `<p>No messages found. Be the first to post!</p>`;
-      }
+    if (handleNoMessagesScenario(isPolling, page, response, messagesContainer)) {
       return;
     }
 
-    // Define `mostRecentMessage` to track the latest message during this fetch
-    let mostRecentMessage = latestMessageIdentifiers[room]?.latestTimestamp ? latestMessageIdentifiers[room] : null;
-    let firstNewMessageIdentifier = null
-
-    // Fetch all messages that haven't been fetched before
-    const fetchMessages = await Promise.all(response.map(async (resource) => {
-      if (existingIdentifiers.has(resource.identifier)) {
-        return null; // Skip messages that are already displayed
-      }
-    
-      try {
-        console.log(`Fetching message with identifier: ${resource.identifier}`);
-        const messageResponse = await qortalRequest({
-          action: "FETCH_QDN_RESOURCE",
-          name: resource.name,
-          service,
-          identifier: resource.identifier,
-          ...(room === "admins" ? { encoding: "base64" } : {}),
-        });
-    
-        console.log("Fetched message response:", messageResponse);
-    
-        const timestamp = resource.updated || resource.created;
-        const formattedTimestamp = await timestampToHumanReadableDate(timestamp);
-    
-        let messageObject;
-
-          if (room === "admins") {
-            try {
-              const decryptedData = await decryptObject(messageResponse);
-              messageObject = JSON.parse(atob(decryptedData))
-            } catch (error) {
-              console.error(`Failed to decrypt message: ${error.message}`);
-              return {
-                name: resource.name,
-                content: "<em>Encrypted message cannot be displayed</em>",
-                date: formattedTimestamp,
-                identifier: resource.identifier,
-                replyTo: null,
-                timestamp,
-                attachments: [],
-              };
-            }
-          } else {
-            messageObject = messageResponse;
-          }
-
-          return {
-            name: resource.name,
-            content: messageObject?.messageHtml || "<em>Message content missing</em>",
-            date: formattedTimestamp,
-            identifier: resource.identifier,
-            replyTo: messageObject?.replyTo || null,
-            timestamp,
-            attachments: messageObject?.attachments || [],
-          };
-        } catch (error) {
-          console.error(`Failed to fetch message with identifier ${resource.identifier}. Error: ${error.message}`);
-          return {
-            name: resource.name,
-            content: "<em>Error loading message</em>",
-            date: "Unknown",
-            identifier: resource.identifier,
-            replyTo: null,
-            timestamp: resource.updated || resource.created,
-            attachments: [],
-          };
-        }
-      })
+    // Re-establish existing identifiers after preparing container
+    existingIdentifiers = new Set(
+      Array.from(messagesContainer.querySelectorAll('.message-item'))
+        .map(item => item.dataset.identifier)
     );
 
-    // Render new messages without duplication
-    for (const message of fetchMessages) {
-      if (message && !existingIdentifiers.has(message.identifier)) {
-        const isNewMessage = !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp);
-        if (isNewMessage && !firstNewMessageIdentifier) {
-          firstNewMessageIdentifier = message.identifier;
-        }
-        let replyHtml = "";
-        if (message.replyTo) {
-          const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo);
-          if (repliedMessage) {
-            replyHtml = `
-              <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
-                <div class="reply-header">In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span></div>
-                <div class="reply-content">${repliedMessage.content}</div>
-              </div>
-            `;
-          }
-        }
+    let mostRecentMessage = getCurrentMostRecentMessage(room);
 
-        let attachmentHtml = "";
-        if (message.attachments && message.attachments.length > 0) {
-          for (const attachment of message.attachments) {
-            if (room !== "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
-              try {
-                // Construct the image URL
-                const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
-        
-                // Add the image HTML with the direct URL
-                attachmentHtml += `<div class="attachment">
-                  <img src="${imageUrl}" alt="${attachment.filename}" class="inline-image"/>
-                </div>`;
-        
-                // Set up the modal download button
-                const downloadButton = document.getElementById("download-button");
-                downloadButton.onclick = () => {
-                  fetchAndSaveAttachment(
-                    attachment.service,
-                    attachment.name,
-                    attachment.identifier,
-                    attachment.filename,
-                    attachment.mimeType
-                  );
-                };
-              } catch (error) {
-                console.error(`Failed to fetch attachment ${attachment.filename}:`, error);
-              }
-            } else {
-              // Display a button to download non-image attachments
-              attachmentHtml += `<div class="attachment">
-                <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">Download ${attachment.filename}</button>
-              </div>`;
-            }
-          }
-        }
-        
-        const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
-        const messageHTML = `
-          <div class="message-item" data-identifier="${message.identifier}">
-            <div class="message-header" style="display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center;">
-                <img src="${avatarUrl}" alt="Avatar" class="user-avatar" style="width: 30px; height: 30px; border-radius: 50%; margin-right: 10px;">
-                <span class="username">${message.name}</span>
-                ${isNewMessage ? `<span class="new-indicator" style="margin-left: 10px; color: red; font-weight: bold;">NEW</span>` : ''}
-              </div>
-              <span class="timestamp">${message.date}</span>
-            </div>
-            ${replyHtml}
-            <div class="message-text">${message.content}</div>
-            <div class="attachments-gallery">
-              ${attachmentHtml}
-            </div>
-            <button class="reply-button" data-message-identifier="${message.identifier}">Reply</button>
-          </div>
-        `;
-
-        // Append new message to the end of the container
-        messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
-
-        // Update mostRecentMessage if this message is newer
-        if (!mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp || 0)) {
-          mostRecentMessage = {
-            latestIdentifier: message.identifier,
-            latestTimestamp: message.timestamp
-          };
-        }
-
-        // Add the identifier to the existingIdentifiers set
-        existingIdentifiers.add(message.identifier);
-      }
-    }
+    const fetchMessages = await fetchAllMessages(response, service, room);
+    const { firstNewMessageIdentifier, updatedMostRecentMessage } = renderNewMessages(
+      fetchMessages,
+      existingIdentifiers,
+      messagesContainer,
+      room,
+      mostRecentMessage
+    );
 
     if (firstNewMessageIdentifier && !isPolling) {
-      // Scroll to the first new message
-      const newMessageElement = document.querySelector(`.message-item[data-identifier="${firstNewMessageIdentifier}"]`);
-      if (newMessageElement) {
-        newMessageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      scrollToNewMessages(firstNewMessageIdentifier);
     }
 
-    // Update latestMessageIdentifiers for the room
-    if (mostRecentMessage) {
-      latestMessageIdentifiers[room] = mostRecentMessage;
-      localStorage.setItem("latestMessageIdentifiers", JSON.stringify(latestMessageIdentifiers));
+    if (updatedMostRecentMessage) {
+      updateLatestMessageIdentifiers(room, updatedMostRecentMessage);
     }
 
-    // Add event listeners to the reply buttons
-    const replyButtons = document.querySelectorAll(".reply-button");
-    replyButtons.forEach(button => {
-      button.addEventListener("click", () => {
-        replyToMessageIdentifier = button.dataset.messageIdentifier;
-        // Find the message being replied to
-        const repliedMessage = fetchMessages.find(m => m && m.identifier === replyToMessageIdentifier);
+    handleReplyLogic(fetchMessages);
 
-        if (repliedMessage) {
-          const replyContainer = document.createElement("div");
-          replyContainer.className = "reply-container";
-          replyContainer.innerHTML = `
-            <div class="reply-preview" style="border: 1px solid #ccc; padding: 1vh; margin-bottom: 1vh; background-color: black; color: white;">
-              <strong>Replying to:</strong> ${repliedMessage.content}
-              <button id="cancel-reply" style="float: right; color: red; background-color: black; font-weight: bold;">Cancel</button>
-            </div>
-          `;
-
-          if (!document.querySelector(".reply-container")) {
-            const messageInputSection = document.querySelector(".message-input-section");
-
-            if (messageInputSection) {
-              messageInputSection.insertBefore(replyContainer, messageInputSection.firstChild);
-
-              // Add a listener for the cancel reply button
-              document.getElementById("cancel-reply").addEventListener("click", () => {
-                replyToMessageIdentifier = null;
-                replyContainer.remove();
-              });
-            }
-          }
-          const messageInputSection = document.querySelector(".message-input-section");
-          const editor = document.querySelector(".ql-editor");
-
-          if (messageInputSection) {
-            messageInputSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-
-          if (editor) {
-            editor.focus();
-          }
-        }
-      });
-    });
-
-    // Render pagination controls
-    const totalMessages = await searchAllCountOnly(`${messageIdentifierPrefix}-${room}`);
-    renderPaginationControls(room, totalMessages, limit);
+    await updatePaginationControls(room, limit);
   } catch (error) {
     console.error('Error loading messages from QDN:', error);
   }
-}
+};
+
+/** Helper Functions (Arrow Functions) **/
+
+const prepareMessageContainer = (messagesContainer, isPolling) => {
+  if (!isPolling) {
+    messagesContainer.innerHTML = "";
+    existingIdentifiers.clear();
+  }
+};
+
+const getServiceAndQuery = (room) => {
+  const service = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST";
+  const query = (room === "admins") 
+    ? `${messageIdentifierPrefix}-${room}-e` 
+    : `${messageIdentifierPrefix}-${room}`;
+  return { service, query };
+};
+
+const fetchResourceList = async (service, query, limit, offset, room) => {
+  return await searchAllWithOffset(service, query, limit, offset, room);
+};
+
+const handleNoMessagesScenario = (isPolling, page, response, messagesContainer) => {
+  if (response.length === 0) {
+    if (page === 0 && !isPolling) {
+      messagesContainer.innerHTML = `<p>No messages found. Be the first to post!</p>`;
+    }
+    return true;
+  }
+  return false;
+};
+
+const getCurrentMostRecentMessage = (room) => {
+  return latestMessageIdentifiers[room]?.latestTimestamp ? latestMessageIdentifiers[room] : null;
+};
+
+const fetchAllMessages = async (response, service, room) => {
+  return Promise.all(response.map(resource => fetchFullMessage(resource, service, room)));
+};
+
+const fetchFullMessage = async (resource, service, room) => {
+  try {
+    // Skip if already displayed
+    if (existingIdentifiers.has(resource.identifier)) {
+      return null;
+    }
+
+    console.log(`Fetching message with identifier: ${resource.identifier}`);
+    const messageResponse = await qortalRequest({
+      action: "FETCH_QDN_RESOURCE",
+      name: resource.name,
+      service,
+      identifier: resource.identifier,
+      ...(room === "admins" ? { encoding: "base64" } : {}),
+    });
+
+    const timestamp = resource.updated || resource.created;
+    const formattedTimestamp = await timestampToHumanReadableDate(timestamp);
+    const messageObject = await processMessageObject(messageResponse, room);
+
+    return {
+      name: resource.name,
+      content: messageObject?.messageHtml || "<em>Message content missing</em>",
+      date: formattedTimestamp,
+      identifier: resource.identifier,
+      replyTo: messageObject?.replyTo || null,
+      timestamp,
+      attachments: messageObject?.attachments || [],
+    };
+  } catch (error) {
+    console.error(`Failed to fetch message ${resource.identifier}: ${error.message}`);
+    return {
+      name: resource.name,
+      content: "<em>Error loading message</em>",
+      date: "Unknown",
+      identifier: resource.identifier,
+      replyTo: null,
+      timestamp: resource.updated || resource.created,
+      attachments: [],
+    };
+  }
+};
+
+const processMessageObject = async (messageResponse, room) => {
+  if (room !== "admins") {
+    return messageResponse;
+  }
+
+  try {
+    const decryptedData = await decryptAndParseObject(messageResponse);
+    return decryptedData
+  } catch (error) {
+    console.error(`Failed to decrypt admin message: ${error.message}`);
+    return null;
+  }
+};
+
+const renderNewMessages = (fetchMessages, existingIdentifiers, messagesContainer, room, mostRecentMessage) => {
+  let firstNewMessageIdentifier = null;
+  let updatedMostRecentMessage = mostRecentMessage;
+
+  for (const message of fetchMessages) {
+    if (message && !existingIdentifiers.has(message.identifier)) {
+      const isNewMessage = isMessageNew(message, mostRecentMessage);
+      if (isNewMessage && !firstNewMessageIdentifier) {
+        firstNewMessageIdentifier = message.identifier;
+      }
+
+      const messageHTML = buildMessageHTML(message, fetchMessages, room, isNewMessage);
+      messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+
+      if (!updatedMostRecentMessage || new Date(message.timestamp) > new Date(updatedMostRecentMessage?.latestTimestamp || 0)) {
+        updatedMostRecentMessage = {
+          latestIdentifier: message.identifier,
+          latestTimestamp: message.timestamp,
+        };
+      }
+
+      existingIdentifiers.add(message.identifier);
+    }
+  }
+
+  return { firstNewMessageIdentifier, updatedMostRecentMessage };
+};
+
+const isMessageNew = (message, mostRecentMessage) => {
+  return !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp);
+};
+
+const buildMessageHTML = (message, fetchMessages, room, isNewMessage) => {
+  const replyHtml = buildReplyHtml(message, fetchMessages);
+  const attachmentHtml = buildAttachmentHtml(message, room);
+  const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
+
+  return `
+    <div class="message-item" data-identifier="${message.identifier}">
+      <div class="message-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center;">
+          <img src="${avatarUrl}" alt="Avatar" class="user-avatar" style="width: 30px; height: 30px; border-radius: 50%; margin-right: 10px;">
+          <span class="username">${message.name}</span>
+          ${isNewMessage ? `<span class="new-indicator" style="margin-left: 10px; color: red; font-weight: bold;">NEW</span>` : ''}
+        </div>
+        <span class="timestamp">${message.date}</span>
+      </div>
+      ${replyHtml}
+      <div class="message-text">${message.content}</div>
+      <div class="attachments-gallery">
+        ${attachmentHtml}
+      </div>
+      <button class="reply-button" data-message-identifier="${message.identifier}">Reply</button>
+    </div>
+  `;
+};
+
+const buildReplyHtml = (message, fetchMessages) => {
+  if (!message.replyTo) return "";
+
+  const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo);
+  if (!repliedMessage) return "";
+
+  return `
+    <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
+      <div class="reply-header">In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span></div>
+      <div class="reply-content">${repliedMessage.content}</div>
+    </div>
+  `;
+};
+
+const buildAttachmentHtml = (message, room) => {
+  if (!message.attachments || message.attachments.length === 0) return "";
+
+  return message.attachments.map(attachment => buildSingleAttachmentHtml(attachment, room)).join("");
+};
+
+const buildSingleAttachmentHtml = (attachment, room) => {
+  if (room !== "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
+    const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
+    return `
+      <div class="attachment">
+        <img src="${imageUrl}" alt="${attachment.filename}" class="inline-image"/>
+      </div>
+    `;
+  } else {
+    // Non-image attachment
+    return `
+      <div class="attachment">
+        <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">
+          Download ${attachment.filename}
+        </button>
+      </div>
+    `;
+  }
+};
+
+const scrollToNewMessages = (firstNewMessageIdentifier) => {
+  const newMessageElement = document.querySelector(`.message-item[data-identifier="${firstNewMessageIdentifier}"]`);
+  if (newMessageElement) {
+    newMessageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+};
+
+const updateLatestMessageIdentifiers = (room, mostRecentMessage) => {
+  latestMessageIdentifiers[room] = mostRecentMessage;
+  localStorage.setItem("latestMessageIdentifiers", JSON.stringify(latestMessageIdentifiers));
+};
+
+const handleReplyLogic = (fetchMessages) => {
+  const replyButtons = document.querySelectorAll(".reply-button");
+  replyButtons.forEach(button => {
+    button.addEventListener("click", () => {
+      const replyToMessageIdentifier = button.dataset.messageIdentifier;
+      const repliedMessage = fetchMessages.find(m => m && m.identifier === replyToMessageIdentifier);
+      if (repliedMessage) {
+        showReplyPreview(repliedMessage);
+      }
+    });
+  });
+};
+
+const showReplyPreview = (repliedMessage) => {
+  replyToMessageIdentifier = repliedMessage.identifier;
+
+  const replyContainer = document.createElement("div");
+  replyContainer.className = "reply-container";
+  replyContainer.innerHTML = `
+    <div class="reply-preview" style="border: 1px solid #ccc; padding: 1vh; margin-bottom: 1vh; background-color: black; color: white;">
+      <strong>Replying to:</strong> ${repliedMessage.content}
+      <button id="cancel-reply" style="float: right; color: red; background-color: black; font-weight: bold;">Cancel</button>
+    </div>
+  `;
+
+  if (!document.querySelector(".reply-container")) {
+    const messageInputSection = document.querySelector(".message-input-section");
+    if (messageInputSection) {
+      messageInputSection.insertBefore(replyContainer, messageInputSection.firstChild);
+      document.getElementById("cancel-reply").addEventListener("click", () => {
+        replyToMessageIdentifier = null;
+        replyContainer.remove();
+      });
+    }
+  }
+
+  const messageInputSection = document.querySelector(".message-input-section");
+  const editor = document.querySelector(".ql-editor");
+
+  if (messageInputSection) {
+    messageInputSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  if (editor) {
+    editor.focus();
+  }
+};
+
+const updatePaginationControls = async (room, limit) => {
+  const totalMessages = room === "admins" ? await searchAllCountOnly(`${messageIdentifierPrefix}-${room}`, room) : await searchAllCountOnly(`${messageIdentifierPrefix}-${room}-e`, room)
+  renderPaginationControls(room, totalMessages, limit);
+};
+
 
 
 // Polling function to check for new messages without clearing existing ones

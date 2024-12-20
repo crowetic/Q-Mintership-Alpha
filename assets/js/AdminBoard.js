@@ -1,9 +1,9 @@
 // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
-const isEncryptedTestMode = true;
-const encryptedCardIdentifierPrefix = "test-MDC";
-let isExistingEncryptedCard = false;
-let existingDecryptedCardData = {};
-let existingEncryptedCardIdentifier = {};
+const isEncryptedTestMode = true
+const encryptedCardIdentifierPrefix = "test-MDC"
+let isExistingEncryptedCard = false
+let existingDecryptedCardData = {}
+let existingEncryptedCardIdentifier = {}
 let cardMinterName = {}
 let existingCardMinterNames = []
 
@@ -93,7 +93,7 @@ const loadAdminBoardPage = async () => {
     await publishEncryptedCard();
   });
 
-  await createCardMinterNameList();
+  // await fetchAndValidateAllAdminCards();
   await fetchAllEncryptedCards();
 }
 
@@ -102,55 +102,75 @@ const extractCardsMinterName = (cardIdentifier) => {
   if (!cardIdentifier.startsWith(`${encryptedCardIdentifierPrefix}-`)) {
     throw new Error('Invalid identifier format or prefix mismatch');
   }
-
   // Split the identifier into parts
   const parts = cardIdentifier.split('-');
-
   // Ensure the format has at least 3 parts
   if (parts.length < 3) {
     throw new Error('Invalid identifier format');
   }
-
   // Extract minterName (everything from the second part to the second-to-last part)
   const minterName = parts.slice(2, -1).join('-');
-
   // Return the extracted minterName
   return minterName;
 }
 
+const processCards = async (validEncryptedCards) => {
+  const latestCardsMap = new Map()
 
-const createCardMinterNameList = async () => {
-  
-  const response = await qortalRequest({
-  action: "SEARCH_QDN_RESOURCES",
-  service: "MAIL_PRIVATE",
-  query: `${encryptedCardIdentifierPrefix}`,
-  mode: "ALL",
-  });
+  // Step 1: Filter and keep the most recent card per identifier
+  validEncryptedCards.forEach(card => {
+    const timestamp = card.updated || card.created || 0
+    const existingCard = latestCardsMap.get(card.identifier)
 
-  const validatedEncryptedCards = await Promise.all(
-    response.map(async card => {
-    const isValid = await validateEncryptedCardIdentifier(card);
-    return isValid ? card : null;
-    })
-  )
+    if (!existingCard || timestamp > (existingCard.updated || existingCard.created || 0)) {
+      latestCardsMap.set(card.identifier, card)
+    }
+  })
 
-  const validEncryptedCards = validatedEncryptedCards.filter(card => card !== null);
+  // Step 2: Extract unique cards
+  const uniqueValidCards = Array.from(latestCardsMap.values())
 
-  if (validEncryptedCards.length === 0) {
-    console.log(`no matches found, not adding any names to name list.`)
-    return;
-  }
+  // Step 3: Group by minterName and select the most recent card per minterName
+  const minterNameMap = new Map()
 
-  for (const result of validEncryptedCards) {
-    const minterName = await extractCardsMinterName(result.identifier)
+  for (const card of validEncryptedCards) {
+    const minterName = await extractCardsMinterName(card.identifier)
+    const existingCard = minterNameMap.get(minterName)
+    const cardTimestamp = card.updated || card.created || 0
+    const existingTimestamp = existingCard?.updated || existingCard?.created || 0
 
     if (!existingCardMinterNames.includes(minterName)) {
       existingCardMinterNames.push(minterName)
       console.log(`cardsMinterName: ${minterName} - added to list`)
     }
+
+    // Keep only the most recent card for each minterName
+    if (!existingCard || cardTimestamp > existingTimestamp) {
+      minterNameMap.set(minterName, card)
+    }
   }
-};
+
+  // Step 4: Filter cards to ensure each minterName is included only once
+  const finalCards = []
+  const seenMinterNames = new Set()
+
+  for (const [minterName, card] of minterNameMap.entries()) {
+    if (!seenMinterNames.has(minterName)) {
+      finalCards.push(card)
+      seenMinterNames.add(minterName) // Mark the minterName as seen
+    }
+  }
+
+  // Step 5: Sort by the most recent timestamp
+  finalCards.sort((a, b) => {
+    const timestampA = a.updated || a.created || 0
+    const timestampB = b.updated || b.created || 0
+    return timestampB - timestampA
+  })
+
+  return finalCards
+}
+
 
 //Main function to load the Minter Cards ----------------------------------------
 const fetchAllEncryptedCards = async () => {
@@ -179,40 +199,22 @@ const fetchAllEncryptedCards = async () => {
     );
 
     const validEncryptedCards = validatedEncryptedCards.filter(card => card !== null);
-
+    
     if (validEncryptedCards.length === 0) {
       encryptedCardsContainer.innerHTML = "<p>No valid cards found.</p>";
       return;
     }
-
-    // Group by identifier and keep only the newest card for each identifier
-    const latestCardsMap = new Map();
-
-    validEncryptedCards.forEach(card => {
-      const timestamp = card.updated || card.created || 0;
-      const existingCard = latestCardsMap.get(card.identifier);
-
-      if (!existingCard || timestamp > (existingCard.updated || existingCard.created || 0)) {
-        latestCardsMap.set(card.identifier, card);
-      }
-    });
-
-    // Extract unique cards and sort by timestamp descending
-    const uniqueValidCards = Array.from(latestCardsMap.values()).sort((a, b) => {
-      const timestampA = a.updated || a.created || 0;
-      const timestampB = b.updated || b.created || 0;
-      return timestampB - timestampA;
-    });
+    const finalCards = await processCards(validEncryptedCards)
 
     // Display skeleton cards immediately
     encryptedCardsContainer.innerHTML = "";
-    uniqueValidCards.forEach(card => {
+    finalCards.forEach(card => {
       const skeletonHTML = createSkeletonCardHTML(card.identifier);
       encryptedCardsContainer.insertAdjacentHTML("beforeend", skeletonHTML);
     });
 
     // Fetch and update each card
-    uniqueValidCards.forEach(async card => {
+    finalCards.forEach(async card => {
       try {
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
@@ -240,9 +242,9 @@ const fetchAllEncryptedCards = async () => {
         // Fetch poll results
         const pollResults = await fetchPollResults(decryptedCardData.poll);
         const minterNameFromIdentifier = await extractCardsMinterName(card.identifier);
-
+        const commentCount = await getCommentCount(card.identifier);
         // Generate final card HTML
-        const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier);
+        const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, commentCount);
         replaceEncryptedSkeleton(card.identifier, finalCardHTML);
       } catch (error) {
         console.error(`Error processing card ${card.identifier}:`, error);
@@ -489,6 +491,22 @@ const publishEncryptedCard = async () => {
   }
 }
 
+const getCommentCount = async (cardIdentifier) => {
+  try {
+    const response = await qortalRequest({
+      action: 'SEARCH_QDN_RESOURCES',
+      service: 'MAIL_PRIVATE',
+      query: `comment-${cardIdentifier}`,
+      mode: "ALL"
+    });
+    // Just return the count; no need to decrypt each comment here
+    return Array.isArray(response) ? response.length : 0;
+  } catch (error) {
+    console.error(`Error fetching comment count for ${cardIdentifier}:`, error);
+    return 0;
+  }
+};
+
 // Post a comment on a card. ---------------------------------
 const postEncryptedComment = async (cardIdentifier) => {
   const commentInput = document.getElementById(`new-comment-${cardIdentifier}`);
@@ -498,7 +516,7 @@ const postEncryptedComment = async (cardIdentifier) => {
     return;
   }
 
-  const postTimestamp = `${Date.now()}`
+  const postTimestamp = Date.now()
   console.log(`timestmp to be posted: ${postTimestamp}`)
 
   const commentData = {
@@ -575,7 +593,8 @@ const displayEncryptedComments = async (cardIdentifier) => {
 
       const decryptedCommentData = await decryptAndParseObject(commentDataResponse)
 
-      const timestamp = await timestampToHumanReadableDate(decryptedCommentData.timestamp);
+      const timestampCheck = comment.updated || comment.created || 0
+      const timestamp = await timestampToHumanReadableDate(timestampCheck);
 
       //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
       const commentHTML = `
@@ -688,7 +707,7 @@ const processQortalLinkForRendering = async (link) => {
 }
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier) => {
+const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
   const { minterName, header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = new Date(timestamp).toLocaleString();
   const minterAvatar = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`;
@@ -740,7 +759,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier) =>
     <div class="actions">
       <div class="actions-buttons">
         <button class="yes" onclick="voteYesOnPoll('${poll}')">YES</button>
-        <button class="comment" onclick="toggleEncryptedComments('${cardIdentifier}')">COMMENTS</button>
+        <button class="comment" onclick="toggleEncryptedComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
         <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>
