@@ -806,92 +806,138 @@ async function loadImageHtml(service, name, identifier, filename, mimeType) {
 
 const fetchAndSaveAttachment = async (service, name, identifier, filename, mimeType) => {
     try {
-        if (!filename || !mimeType) {
-            console.error("Filename and mimeType are required");
-            return;
-        }
-        let url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?async=true&attempts=5`
-
-        if (service === "MAIL_PRIVATE") {
-            service = "FILE_PRIVATE";
-        }
-        if (service === "FILE_PRIVATE") {
-            const urlPrivate = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?encoding=base64&async=true&attempts=5`
-            const response = await fetch(urlPrivate,{
-                method: 'GET',
-                headers: { 'accept': 'text/plain' }
-            })
-            if (!response.ok) {
-                throw new Error(`File not found (HTTP ${response.status}): ${urlPrivate}`)
-            }
-
-            const encryptedBase64Data = response
-            console.log("Fetched Base64 Data:", encryptedBase64Data)
-
-            // const sanitizedBase64 = encryptedBase64Data.replace(/[\r\n]+/g, '')
-            const decryptedData = await decryptObject(encryptedBase64Data)
-            console.log("Decrypted Data:", decryptedData);
-
-            const fileBlob = new Blob((decryptedData), { type: mimeType })
-
-            await qortalRequest({
-                action: "SAVE_FILE",
-                blob: fileBlob,
-                filename,
-                mimeType,
-            });
-            console.log("Encrypted file saved successfully:", filename)
-        } else {
-
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {'accept': 'text/plain'}
-            });
-            if (!response.ok) {
-                throw new Error(`File not found (HTTP ${response.status}): ${url}`)
-            }
-
-            const blob = await response.blob()
-            await qortalRequest({
-                action: "SAVE_FILE",
-                blob,
-                filename,
-                mimeType,
-            })
-            console.log("File saved successfully:", filename)
-        }
-    } catch (error) {
-        console.error(
-            `Error fetching or saving attachment (service: ${service}, name: ${name}, identifier: ${identifier}):`,
-            error
-        );
-    }
-};
-
-const fetchEncryptedImageHtml = async (service, name, identifier, filename, mimeType) => {
-    const urlPrivate = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?encoding=base64&async=true&attempts=5`
-        const response = await fetch(urlPrivate,{
-            method: 'GET',
-            headers: { 'accept': 'text/plain' }
-        })
+      if (!filename || !mimeType) {
+        console.error("Filename and mimeType are required");
+        return;
+      }
+  
+      // If it's a private file, we fetch with ?encoding=base64 and decrypt
+      if (service === "MAIL_PRIVATE") {
+        service = "FILE_PRIVATE"; 
+      }
+  
+      const baseUrlWithParams = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?async=true&attempts=5`;
+  
+      if (service === "FILE_PRIVATE") {
+        // 1) We want the encrypted base64
+        const urlPrivate = `${baseUrlWithParams}&encoding=base64`; 
+        const response = await fetch(urlPrivate, {
+          method: 'GET',
+          headers: { 'accept': 'text/plain' }
+        });
         if (!response.ok) {
-            throw new Error(`File not found (HTTP ${response.status}): ${urlPrivate}`)
+          throw new Error(`File not found (HTTP ${response.status}): ${urlPrivate}`);
         }
-        //obtain the encrypted base64 of the image
-        const encryptedBase64Data = response
-        console.log("Fetched Base64 Data:", encryptedBase64Data)
-        //decrypt the encrypted base64 object
-        const decryptedData = await decryptObject(encryptedBase64Data)
-        console.log("Decrypted Data:", decryptedData);
-        //turn the decrypted object into a blob/uint8 array and specify mimetype //todo check if the uint8Array is needed or not. I am guessing not.
-        const fileBlob = new Blob((decryptdData), { type: mimeType })
-        //create the URL for the decrypted file blob
-        const objectUrl = URL.createObjectURL(fileBlob)
-        //create the HTML from the file blob URL.
-        const attachmentHtml = `<div class="attachment"><img src="${objectUrl}" alt="${filename}" class="inline-image"></div>`;
+  
+        // 2) Get the encrypted base64 text
+        const encryptedBase64Data = await response.text();
+        console.log("Fetched Encrypted Base64 Data:", encryptedBase64Data);
+  
+        // 3) Decrypt => returns decrypted base64
+        const decryptedBase64 = await decryptObject(encryptedBase64Data);
+        console.log("Decrypted Base64 Data:", decryptedBase64);
+  
+        // 4) Convert that to a Blob
+        const fileBlob = base64ToBlob(decryptedBase64, mimeType);
+  
+        // 5) Save the file using qortalRequest
+        await qortalRequest({
+          action: "SAVE_FILE",
+          blob: fileBlob,
+          filename,
+          mimeType
+        });
+        console.log("Encrypted file saved successfully:", filename);
+  
+      } else {
+        // Normal, unencrypted file
+        const response = await fetch(baseUrlWithParams, {
+          method: 'GET',
+          headers: { 'accept': 'text/plain' }
+        });
+        if (!response.ok) {
+          throw new Error(`File not found (HTTP ${response.status}): ${baseUrlWithParams}`);
+        }
+  
+        const blob = await response.blob();
+        await qortalRequest({
+          action: "SAVE_FILE",
+          blob,
+          filename,
+          mimeType
+        });
+        console.log("File saved successfully:", filename);
+      }
+  
+    } catch (error) {
+      console.error(
+        `Error fetching or saving attachment (service: ${service}, name: ${name}, identifier: ${identifier}):`,
+        error
+      );
+    }
+  };
+  
 
-        return attachmentHtml
-}
+/**
+ * Convert a base64-encoded string into a Blob
+ * @param {string} base64String - The base64-encoded string (unencrypted)
+ * @param {string} mimeType - The MIME type of the file
+ * @returns {Blob} The resulting Blob
+ */
+const base64ToBlob = (base64String, mimeType) => {
+    // Decode base64 to binary string
+    const binaryString = atob(base64String);
+    // Convert binary string to Uint8Array
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // Create a blob from the Uint8Array
+    return new Blob([bytes], { type: mimeType });
+  };
+  
+
+  const fetchEncryptedImageBase64 = async (service, name, identifier, mimeType) => {
+    try {
+      // Fix potential typo: use &async=...
+      const urlPrivate = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?encoding=base64&async=true&attempts=5`;
+  
+      const response = await fetch(urlPrivate, {
+        method: 'GET',
+        headers: { 'accept': 'text/plain' }
+      });
+      if (!response.ok) {
+        // Return null to "skip" the missing file
+        console.warn(`File not found (HTTP ${response.status}): ${urlPrivate}`);
+        return null;
+      }
+      
+      // 2) Read the base64 text
+      const encryptedBase64Data = await response.text(); 
+      console.log("Fetched Encrypted Base64 Data:", encryptedBase64Data);
+    
+      // 3) Decrypt => returns the *decrypted* base64 string
+      const decryptedBase64 = await decryptObject(encryptedBase64Data);
+      console.log("Decrypted Base64 Data:", decryptedBase64);
+    
+      // 4) Convert that decrypted base64 into a Blob
+      const fileBlob = base64ToBlob(decryptedBase64, mimeType);
+    
+      // 5) (Optional) Create an object URL
+      const objectUrl = URL.createObjectURL(fileBlob);
+      console.log("Object URL:", objectUrl);
+  
+      // Return the base64 or objectUrl, whichever you need
+      return decryptedBase64;
+  
+    } catch (error) {
+      console.error("Skipping file due to error in fetchEncryptedImageBase64:", error);
+      return null; // indicates "missing or failed"
+    }
+  };
+  
+  
 
 
 const renderData = async (service, name, identifier) => {

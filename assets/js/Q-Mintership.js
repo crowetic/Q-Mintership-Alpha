@@ -132,7 +132,7 @@ const loadForumPage = async () => {
         }
     }
 
-    if (typeof userState.isAdmin === 'undefined') {
+    if ((typeof userState.isAdmin === 'undefined') || (!userState.isAdmin)){
       try {
         // Fetch and verify the admin status asynchronously
         userState.isAdmin = await verifyUserIsAdmin();
@@ -244,6 +244,10 @@ const loadRoomContent = async (room) => {
     return;
   }
 
+  if (userState.isAdmin) {
+    await loadOrFetchAdminGroupsData()
+  }
+
   // Set initial content
   forumContent.innerHTML = `
     <div class="room-content">
@@ -258,7 +262,7 @@ const loadRoomContent = async (room) => {
           <label for="file-input" class="custom-file-input-button">Select Files</label>
           <input type="file" id="image-input" class="image-input" multiple accept="image/*">
           <label for="image-input" class="custom-image-input-button">Select IMAGES w/Preview</label>
-          <button id="add-images-to-publish-button" disabled>Add Images to Multi-Publish</button>
+          <button id="add-images-to-publish-button" style="display: none" disabled>Add Images to Multi-Publish</button>
           <div id="preview-container" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
         </div>
         <button id="send-button" class="send-button">Publish</button>
@@ -381,6 +385,7 @@ const setupFileInputs = (room) => {
   addToPublishButton.addEventListener('click', () => {
     processSelectedImages(selectedImages, multiResource, room);
     selectedImages = [];
+    imageFileInput.value = "";
     addToPublishButton.disabled = true;
   });
 
@@ -424,12 +429,12 @@ const processSelectedImages = async (selectedImages, multiResource, room) => {
 // Handle send message
 const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImages, multiResource) => {
   const messageIdentifier = room === "admins"
-    ? `${messageIdentifierPrefix}-${room}-e-${Date.now()}`
-    : `${messageIdentifierPrefix}-${room}-${Date.now()}`;
+    ? `${messageIdentifierPrefix}-${room}-e-${randomID()}`
+    : `${messageIdentifierPrefix}-${room}-${randomID()}`;
 
-  const adminPublicKeys = room === "admins" && userState.isAdmin
-    ? await fetchAdminGroupsMembersPublicKeys()
-    : [];
+  // const checkedAdminPublicKeys = room === "admins" && userState.isAdmin
+  //   ? adminPublicKeys
+  //   : await loadOrFetchAdminGroupsData().publicKeys;
 
   try {
     // Process selected images
@@ -481,19 +486,19 @@ const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImage
         service: "MAIL_PRIVATE",
         identifier: messageIdentifier,
         data64: base64Message,
-      });
+      })
     } else {
       multiResource.push({
         name: userState.accountName,
         service: "BLOG_POST",
         identifier: messageIdentifier,
         data64: base64Message,
-      });
+      })
     }
 
     // Publish resources
     if (room === "admins") {
-      if (!userState.isAdmin || adminPublicKeys.length === 0) {
+      if (!userState.isAdmin) {
         console.error("User is not an admin or no admin public keys found. Aborting publish.");
         window.alert("You are not authorized to post in the Admin room.");
         return;
@@ -596,7 +601,7 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
     let mostRecentMessage = getCurrentMostRecentMessage(room);
 
     const fetchMessages = await fetchAllMessages(response, service, room);
-    const { firstNewMessageIdentifier, updatedMostRecentMessage } = renderNewMessages(
+    const { firstNewMessageIdentifier, updatedMostRecentMessage } = await renderNewMessages(
       fetchMessages,
       existingIdentifiers,
       messagesContainer,
@@ -655,10 +660,29 @@ const getCurrentMostRecentMessage = (room) => {
   return latestMessageIdentifiers[room]?.latestTimestamp ? latestMessageIdentifiers[room] : null;
 };
 
+// 1) Convert fetchAllMessages to fully async
 const fetchAllMessages = async (response, service, room) => {
-  return Promise.all(response.map(resource => fetchFullMessage(resource, service, room)));
+  // Instead of returning Promise.all(...) directly,
+  // we explicitly map each resource to a try/catch block.
+  const messages = await Promise.all(
+    response.map(async (resource) => {
+      try {
+        const msg = await fetchFullMessage(resource, service, room);
+        return msg; // This might be null if you do that check in fetchFullMessage
+      } catch (err) {
+        console.error(`Skipping resource ${resource.identifier} due to error:`, err);
+        // Return null so it doesn't break everything
+        return null;
+      }
+    })
+  );
+
+  // Filter out any that are null/undefined (missing or errored)
+  return messages.filter(Boolean);
 };
 
+
+// 2) fetchFullMessage is already async. We keep it async/await-based
 const fetchFullMessage = async (resource, service, room) => {
   try {
     // Skip if already displayed
@@ -702,6 +726,7 @@ const fetchFullMessage = async (resource, service, room) => {
   }
 };
 
+
 const processMessageObject = async (messageResponse, room) => {
   if (room !== "admins") {
     return messageResponse;
@@ -716,7 +741,7 @@ const processMessageObject = async (messageResponse, room) => {
   }
 };
 
-const renderNewMessages = (fetchMessages, existingIdentifiers, messagesContainer, room, mostRecentMessage) => {
+const renderNewMessages = async (fetchMessages, existingIdentifiers, messagesContainer, room, mostRecentMessage) => {
   let firstNewMessageIdentifier = null;
   let updatedMostRecentMessage = mostRecentMessage;
 
@@ -727,7 +752,7 @@ const renderNewMessages = (fetchMessages, existingIdentifiers, messagesContainer
         firstNewMessageIdentifier = message.identifier;
       }
 
-      const messageHTML = buildMessageHTML(message, fetchMessages, room, isNewMessage);
+      const messageHTML = await buildMessageHTML(message, fetchMessages, room, isNewMessage);
       messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
 
       if (!updatedMostRecentMessage || new Date(message.timestamp) > new Date(updatedMostRecentMessage?.latestTimestamp || 0)) {
@@ -748,9 +773,9 @@ const isMessageNew = (message, mostRecentMessage) => {
   return !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp);
 };
 
-const buildMessageHTML = (message, fetchMessages, room, isNewMessage) => {
-  const replyHtml = buildReplyHtml(message, fetchMessages);
-  const attachmentHtml = buildAttachmentHtml(message, room);  
+const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
+  const replyHtml = await buildReplyHtml(message, fetchMessages);
+  const attachmentHtml = await buildAttachmentHtml(message, room);  
   const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
 
   return `
@@ -773,7 +798,7 @@ const buildMessageHTML = (message, fetchMessages, room, isNewMessage) => {
   `
 }
 
-const buildReplyHtml = (message, fetchMessages) => {
+const buildReplyHtml = async (message, fetchMessages) => {
   if (!message.replyTo) return ""
 
   const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo)
@@ -787,23 +812,47 @@ const buildReplyHtml = (message, fetchMessages) => {
   `
 }
 
-const buildAttachmentHtml = (message, room) => {
-  if (!message.attachments || message.attachments.length === 0) return ""
+const buildAttachmentHtml = async (message, room) => {
+  if (!message.attachments || message.attachments.length === 0) {
+    return "";
+  }
 
-  return message.attachments.map(attachment => buildSingleAttachmentHtml(attachment, room)).join("")
-}
+  // Map over attachments -> array of Promises
+  const attachmentsHtmlPromises = message.attachments.map(attachment =>
+    buildSingleAttachmentHtml(attachment, room)
+  );
 
-const buildSingleAttachmentHtml = (attachment, room) => {
+  // Wait for all Promises to resolve -> array of HTML strings
+  const attachmentsHtmlArray = await Promise.all(attachmentsHtmlPromises);
+
+  // Join them into a single string
+  return attachmentsHtmlArray.join("");
+};
+
+const buildSingleAttachmentHtml = async (attachment, room) => {
   if (room !== "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
     const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`
     return `
       <div class="attachment">
         <img src="${imageUrl}" alt="${attachment.filename}" class="inline-image"/>
+        <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">
+        Save ${attachment.filename}
+        </button>
       </div>
     `
   } else if 
     (room === "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
-    return fetchEncryptedImageHtml(attachment)
+    // const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
+    const decryptedBase64 = await fetchEncryptedImageBase64(attachment.service, attachment.name, attachment.identifier, attachment.mimeType)
+    const dataUrl = `data:image/png;base64,${decryptedBase64}`
+    return `
+      <div class="attachment">
+        <img src="${dataUrl}" alt="${attachment.filename}" class="inline-image"/>
+        <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">
+          Save ${attachment.filename}
+        </button>
+      </div>
+    `;
 
   } else {
     return `

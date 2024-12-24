@@ -1,6 +1,6 @@
 // // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
-const testMode = true;
-const cardIdentifierPrefix = "testMB-board-card";
+const testMode = false;
+const cardIdentifierPrefix = "Minter-board-card";
 let isExistingCard = false;
 let existingCardData = {};
 let existingCardIdentifier = {};
@@ -17,8 +17,8 @@ const loadMinterBoardPage = async () => {
 
   // Add the "Minter Board" content
   const mainContent = document.createElement("div");
-  const publishButtonColor = generateDarkPastelBackgroundBy("MinterBoardPublishButton")
-  const minterBoardNameColor = generateDarkPastelBackgroundBy(randomID)
+  const publishButtonColor = '#527c9d'
+  const minterBoardNameColor = '#527c9d'
   mainContent.innerHTML = `
     <div class="minter-board-main" style="padding: 20px; text-align: center;">
       <h1 style="color: ${minterBoardNameColor};">Minter Board</h1>
@@ -192,7 +192,8 @@ const loadCards = async () => {
         const BgColor = generateDarkPastelBackgroundBy(card.name)
         // Generate final card HTML
         const commentCount = await countComments(card.identifier)
-        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, BgColor);
+        const cardUpdatedTime = card.updated || null
+        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, BgColor);
         
         replaceSkeleton(card.identifier, finalCardHTML);
       } catch (error) {
@@ -636,9 +637,9 @@ const generateDarkPastelBackgroundBy = (name) => {
 
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, BgColor) => {
+const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, BgColor) => {
   const { header, content, links, creator, timestamp, poll } = cardData;
-  const formattedDate = new Date(timestamp).toLocaleString();
+  const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
   // const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
   const avatarHtml = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
