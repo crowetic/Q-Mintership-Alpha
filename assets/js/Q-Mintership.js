@@ -954,57 +954,70 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
 }
 
 const buildReplyHtml = async (message, room) => {
-  if (!message.replyTo) return ""
+  // 1) If no replyTo, skip
+  if (!message.replyTo) return "";
+
+  // 2) Decide which QDN service for this room
   const replyService = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST";
-  const replyIdentifier = message.replyTo
+  const replyIdentifier = message.replyTo;
 
-  const savedRepliedToMessage = messagesById[message.replyTo];
+  // 3) Check if we already have a *saved* message
+  const savedRepliedToMessage = messagesById[replyIdentifier];
+  console.log("savedRepliedToMessage", savedRepliedToMessage);
 
+  // 4) If we do, try to process/decrypt it
   if (savedRepliedToMessage) {
-    const processedMessage = await processMessageObject(savedRepliedToMessage, room)
-    console.log('message is saved in saved message data, returning from that',savedRepliedToMessage)
-    return `
-      <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
-        <div class="reply-header">
-          In reply to: <span class="reply-username">${processedMessage.name}</span>
-          <span class="reply-timestamp">${processedMessage.date}</span>
-        </div>
-        <div class="reply-content">${processedMessage.content}</div>
-      </div>
-    `;
-  }
-  try {
-
-    const replyData = await searchSimple(replyService, replyIdentifier, "", 1)
-    if ((!replyData) || (!replyData.name)){
-      // No result found. You can either return an empty string or handle differently
-      console.log("No data found via searchSimple. Skipping reply rendering.");
-      return "";
-    }
-    const replyName = await replyData.name 
-    const replyTimestamp = await replyData.updated || await replyData.created
-    console.log('message not found in saved message data, using searchSimple', replyData)
-
-
-      // const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo)
-      // const repliedMessageIdentifier = message.replyTo
-      const repliedMessage = await fetchReplyData(replyService, replyName, replyIdentifier, room, replyTimestamp)
-      storeMessageInMap(repliedMessage)
-      if (!repliedMessage) return ""
-
-
+    if (savedRepliedToMessage) {
+      // We successfully processed the cached message
+      console.log("Using saved message data for reply:", savedRepliedToMessage);
       return `
         <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
           <div class="reply-header">
-            In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span>
+            In reply to: <span class="reply-username">${savedRepliedToMessage.name}</span>
+            <span class="reply-timestamp">${savedRepliedToMessage.date}</span>
           </div>
-          <div class="reply-content">${repliedMessage.content}</div>
+          <div class="reply-content">${savedRepliedToMessage.content}</div>
         </div>
-      `
-  } catch (error) {
-    throw (error)
+      `;
+    } else {
+      // The cached message is invalid 
+      console.log("Saved message found but processMessageObject returned null. Falling back...");
+    }
   }
-}
+
+  // 5) Fallback approach: If we don't have it in memory OR the cached version was invalid
+  try {
+    const replyData = await searchSimple(replyService, replyIdentifier, "", 1);
+    if (!replyData || !replyData.name) {
+      console.log("No data found via searchSimple. Skipping reply rendering.");
+      return "";
+    }
+
+    // We'll use replyData to fetch the actual message from QDN
+    const replyName = replyData.name;
+    const replyTimestamp = replyData.updated || replyData.created;
+    console.log("message not found in workable form, using searchSimple result =>", replyData);
+
+    // This fetches and decrypts the actual message
+    const repliedMessage = await fetchReplyData(replyService, replyName, replyIdentifier, room, replyTimestamp);
+    if (!repliedMessage) return "";
+
+    // Now store the final message in the map for next time
+    storeMessageInMap(repliedMessage);
+
+    // Return final HTML
+    return `
+      <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
+        <div class="reply-header">
+          In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span>
+        </div>
+        <div class="reply-content">${repliedMessage.content}</div>
+      </div>
+    `;
+  } catch (error) {
+    throw error;
+  }
+};
 
 const buildAttachmentHtml = async (message, room) => {
   if (!message.attachments || message.attachments.length === 0) {

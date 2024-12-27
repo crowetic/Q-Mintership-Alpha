@@ -310,6 +310,12 @@ const fetchAllEncryptedCards = async () => {
 
         // Fetch poll results
         const pollResults = await fetchPollResults(decryptedCardData.poll);
+
+        if (pollResults?.error) {
+          console.warn(`Skipping card with non-existent poll: ${card.identifier}, poll=${decryptedCardData.poll}`);
+          removeEncryptedSkeleton(card.identifier);
+          return;
+        }
         // const minterNameFromIdentifier = await extractCardsMinterName(card.identifier);
         const encryptedCommentCount = await getEncryptedCommentCount(card.identifier);
         // Generate final card HTML
@@ -712,45 +718,83 @@ const displayEncryptedComments = async (cardIdentifier) => {
 };
 
 const calculateAdminBoardPollResults = async (pollData, minterGroupMembers, minterAdmins) => {
-  const memberAddresses = minterGroupMembers.map(member => member.member)
-  const minterAdminAddresses = minterAdmins.map(member => member.member)
-  const adminGroupsMembers = await fetchAllAdminGroupsMembers()
-  const groupAdminAddresses = adminGroupsMembers.map(member => member.member)
+  // 1) Validate pollData structure
+  if (!pollData || !Array.isArray(pollData.voteWeights) || !Array.isArray(pollData.votes)) {
+    console.warn("Poll data is missing or invalid. pollData:", pollData);
+    return {
+      adminYes: 0,
+      adminNo: 0,
+      minterYes: 0,
+      minterNo: 0,
+      totalYes: 0,
+      totalNo: 0,
+      totalYesWeight: 0,
+      totalNoWeight: 0
+    };
+  }
+
+  // 2) Prepare admin & minter addresses
+  const memberAddresses = minterGroupMembers.map(member => member.member);
+  const minterAdminAddresses = minterAdmins.map(member => member.member);
+  const adminGroupsMembers = await fetchAllAdminGroupsMembers();
+  const groupAdminAddresses = adminGroupsMembers.map(member => member.member);
   const adminAddresses = [];
-  adminAddresses.push(...minterAdminAddresses,...groupAdminAddresses);
+  adminAddresses.push(...minterAdminAddresses, ...groupAdminAddresses);
 
-  let adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, yesWeight = 0 , noWeight = 0
+  let adminYes = 0, adminNo = 0;
+  let minterYes = 0, minterNo = 0;
+  let yesWeight = 0, noWeight = 0;
 
+  // 3) Process voteWeights
   pollData.voteWeights.forEach(weightData => {
     if (weightData.optionName === 'Yes') {
-      yesWeight = weightData.voteWeight
+      yesWeight = weightData.voteWeight;
     } else if (weightData.optionName === 'No') {
-      noWeight = weightData.voteWeight
+      noWeight = weightData.voteWeight;
     }
-  })
+  });
 
+  // 4) Process votes
   for (const vote of pollData.votes) {
-    const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey)
-    console.log(`voter address: ${voterAddress}`)
+    const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey);
+    console.log(`voter address: ${voterAddress}, optionIndex: ${vote.optionIndex}`);
 
     if (vote.optionIndex === 0) {
-      adminAddresses.includes(voterAddress) ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
+      if (adminAddresses.includes(voterAddress)) {
+        adminYes++;
+      } else if (memberAddresses.includes(voterAddress)) {
+        minterYes++;
+      } else {
+        console.log(`voter ${voterAddress} is not a minter nor an admin... Not including results...`);
+      }
     } else if (vote.optionIndex === 1) {
-      adminAddresses.includes(voterAddress) ? adminNo++ : memberAddresses.includes(voterAddress) ? minterNo++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
+      if (adminAddresses.includes(voterAddress)) {
+        adminNo++;
+      } else if (memberAddresses.includes(voterAddress)) {
+        minterNo++;
+      } else {
+        console.log(`voter ${voterAddress} is not a minter nor an admin... Not including results...`);
+      }
     }
   }
 
-  // TODO - create a new function to calculate the weights of each voting MINTER only. 
-  // This will give ALL weight whether voter is in minter group or not... 
-  // until that is changed on the core we must calculate manually. 
-  const totalYesWeight = yesWeight
-  const totalNoWeight = noWeight
+  // 5) Summaries
+  const totalYesWeight = yesWeight;
+  const totalNoWeight = noWeight;
+  const totalYes = adminYes + minterYes;
+  const totalNo = adminNo + minterNo;
 
-  const totalYes = adminYes + minterYes
-  const totalNo = adminNo + minterNo
-
-  return { adminYes, adminNo, minterYes, minterNo, totalYes, totalNo, totalYesWeight, totalNoWeight }
-}
+  return {
+    adminYes,
+    adminNo,
+    minterYes,
+    minterNo,
+    totalYes,
+    totalNo,
+    totalYesWeight,
+    totalNoWeight
+  };
+};
 
 const toggleEncryptedComments = async (cardIdentifier) => {
   const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`)
