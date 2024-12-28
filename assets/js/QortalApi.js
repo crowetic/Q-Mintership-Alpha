@@ -102,7 +102,7 @@ const objectToBase64 = async (obj) => {
         reader.onloadend = () => {
             if (typeof reader.result === 'string') {
                 // Remove 'data:application/jsonbase64,' prefix
-                const base64 = reader.result.replace('data:application/jsonbase64,', '')
+                const base64 = reader.result.replace('data:application/json;base64,', '')
                 console.log(`base64 resolution: ${base64}`)
                 resolve(base64)
             } else {
