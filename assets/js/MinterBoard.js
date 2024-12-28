@@ -120,17 +120,17 @@ const loadMinterBoardPage = async () => {
 const extractMinterCardsMinterName = async (cardIdentifier) => {
   // Ensure the identifier starts with the prefix
   if (!cardIdentifier.startsWith(`${cardIdentifierPrefix}-`)) {
-    throw new Error('Invalid identifier format or prefix mismatch');
+    throw new Error('Invalid identifier format or prefix mismatch')
   }
   // Split the identifier into parts
-  const parts = cardIdentifier.split('-');
+  const parts = cardIdentifier.split('-')
   // Ensure the format has at least 3 parts
   if (parts.length < 3) {
-    throw new Error('Invalid identifier format');
+    throw new Error('Invalid identifier format')
   }
   try {
-    const nameFromIdentifier = await searchSimple('BLOG_POST', cardIdentifier, "", 1)
-    const minterName = await nameFromIdentifier.name
+    const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1)
+    const minterName = await searchSimpleResults.name
     return minterName
   } catch (error) {
     throw error
@@ -195,12 +195,14 @@ const loadCards = async () => {
   cardsContainer.innerHTML = "<p>Loading cards...</p>";
 
   try {
-    const response = await qortalRequest({
-      action: "SEARCH_QDN_RESOURCES",
-      service: "BLOG_POST",
-      query: cardIdentifierPrefix,
-      mode: "ALL"
-    });
+    // const response = await qortalRequest({
+    //   action: "SEARCH_QDN_RESOURCES",
+    //   service: "BLOG_POST",
+    //   query: cardIdentifierPrefix,
+    //   mode: "ALL"
+    // })
+
+    const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, '' , 0)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
       cardsContainer.innerHTML = "<p>No cards found.</p>";
@@ -320,14 +322,16 @@ const createSkeletonCardHTML = (cardIdentifier) => {
 const fetchExistingCard = async () => {
   try {
     // Step 1: Perform the search
-    const response = await qortalRequest({
-      action: "SEARCH_QDN_RESOURCES",
-      service: "BLOG_POST",
-      identifier: cardIdentifierPrefix,
-      name: userState.accountName,
-      mode: "ALL",
-      exactMatchNames: true // Search for the exact userName only when finding existing cards
-    });
+    // const response = await qortalRequest({
+    //   action: "SEARCH_QDN_RESOURCES",
+    //   service: "BLOG_POST",
+    //   identifier: cardIdentifierPrefix,
+    //   name: userState.accountName,
+    //   mode: "ALL",
+    //   exactMatchNames: true // Search for the exact userName only when finding existing cards
+    // })
+    // Changed to searchSimple to improve load times. 
+    const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, `${userState.accountName}`, 0)
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
 
@@ -335,9 +339,11 @@ const fetchExistingCard = async () => {
     if (!response || !Array.isArray(response) || response.length === 0) {
       console.log("No cards found for the current user.");
       return null;
+    } else if (response.length === 1) { // we don't need to go through all of the rest of the checks and filtering nonsense if there's only a single result, just return it.
+      return response[0]
     }
 
-    // Step 3: Validate cards asynchronously
+    // Validate cards asynchronously, check that they are not comments, etc.
     const validatedCards = await Promise.all(
       response.map(async card => {
         const isValid = await validateCardStructure(card);
@@ -345,14 +351,14 @@ const fetchExistingCard = async () => {
       })
     );
 
-    // Step 4: Filter out invalid cards
+    // Filter out invalid cards
     const validCards = validatedCards.filter(card => card !== null);
 
     if (validCards.length > 0) {
-      // Step 5: Sort by most recent timestamp
+      // Sort by most recent timestamp
       const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0];
 
-      // Step 6: Fetch full card data
+      // Fetch full card data
       const cardDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
         name: userState.accountName, // User's account name
@@ -490,7 +496,7 @@ const calculatePollResults = async (pollData, minterGroupMembers, minterAdmins) 
 
   for (const vote of pollData.votes) {
     const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey)
-    console.log(`voter address: ${voterAddress}`)
+    // console.log(`voter address: ${voterAddress}`)
 
     if (vote.optionIndex === 0) {
       adminAddresses.includes(voterAddress) ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
@@ -555,18 +561,19 @@ const postComment = async (cardIdentifier) => {
 //Fetch the comments for a card with passed card identifier ----------------------------
 const fetchCommentsForCard = async (cardIdentifier) => {
   try {
-    const response = await qortalRequest({
-      action: 'SEARCH_QDN_RESOURCES',
-      service: 'BLOG_POST',
-      query: `comment-${cardIdentifier}`,
-      mode: "ALL"
-    });
-    return response;
+    // const response = await qortalRequest({
+    //   action: 'SEARCH_QDN_RESOURCES',
+    //   service: 'BLOG_POST',
+    //   query: `comment-${cardIdentifier}`,
+    //   mode: "ALL"
+    // })
+    const response = await searchSimple('BLOG_POST',`comment-${cardIdentifier}`, '', 0)
+    return response
   } catch (error) {
-    console.error(`Error fetching comments for ${cardIdentifier}:`, error);
-    return [];
+    console.error(`Error fetching comments for ${cardIdentifier}:`, error)
+    return []
   }
-};
+}
 
 // display the comments on the card, with passed cardIdentifier to identify the card --------------
 const displayComments = async (cardIdentifier) => {
@@ -594,8 +601,7 @@ const displayComments = async (cardIdentifier) => {
       commentsContainer.insertAdjacentHTML('beforeend', commentHTML);
     }
   } catch (error) {
-    console.error(`Error displaying comments for ${cardIdentifier}:`, error);
-    alert("Failed to load comments. Please try again.");
+    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error);
   }
 };
 
@@ -624,12 +630,14 @@ const toggleComments = async (cardIdentifier) => {
 
 const countComments = async (cardIdentifier) => {
   try {
-    const response = await qortalRequest({
-      action: 'SEARCH_QDN_RESOURCES',
-      service: 'BLOG_POST',
-      query: `comment-${cardIdentifier}`,
-      mode: "ALL"
-    });
+    // const response = await qortalRequest({
+    //   action: 'SEARCH_QDN_RESOURCES',
+    //   service: 'BLOG_POST',
+    //   query: `comment-${cardIdentifier}`,
+    //   mode: "ALL"
+    // })
+    // Changed to searchSimple to hopefully improve load times...
+    const response = await searchSimple('BLOG_POST', `comment-${cardIdentifier}`, '', 0)
     // Just return the count; no need to decrypt each comment here
     return Array.isArray(response) ? response.length : 0;
   } catch (error) {

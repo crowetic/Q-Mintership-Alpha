@@ -173,9 +173,10 @@ const extractCardsMinterName = (cardIdentifier) => {
   if (parts.length < 3) {
     throw new Error('Invalid identifier format');
   }
+  
   if (parts.slice(2, -1).join('-') === 'TOPIC') {
     console.log(`TOPIC found in identifier: ${cardIdentifier} - not including in duplicatesList`)
-    return
+    return 'topic'
   }
   // Extract minterName (everything from the second part to the second-to-last part)
   const minterName = parts.slice(2, -1).join('-');
@@ -186,59 +187,24 @@ const extractCardsMinterName = (cardIdentifier) => {
 const processCards = async (validEncryptedCards) => {
   const latestCardsMap = new Map()
 
-  // Step 1: Filter and keep the most recent card per identifier
-  validEncryptedCards.forEach(card => {
+  // Step 1: Process all cards in parallel
+  await Promise.all(validEncryptedCards.map(async card => {
     const timestamp = card.updated || card.created || 0
     const existingCard = latestCardsMap.get(card.identifier)
 
     if (!existingCard || timestamp > (existingCard.updated || existingCard.created || 0)) {
       latestCardsMap.set(card.identifier, card)
     }
-  })
+  }))
+
+  console.log(`latestCardsMap, by timestamp`, latestCardsMap)
 
   // Step 2: Extract unique cards
   const uniqueValidCards = Array.from(latestCardsMap.values())
 
-  // Step 3: Group by minterName and select the most recent card per minterName
-  const minterNameMap = new Map()
-
-  for (const card of validEncryptedCards) {
-    const minterName = await extractCardsMinterName(card.identifier)
-    const existingCard = minterNameMap.get(minterName)
-    const cardTimestamp = card.updated || card.created || 0
-    const existingTimestamp = existingCard?.updated || existingCard?.created || 0
-
-    if (!existingCardMinterNames.includes(minterName)) {
-      existingCardMinterNames.push(minterName)
-      console.log(`cardsMinterName: ${minterName} - added to list`)
-    }
-
-    // Keep only the most recent card for each minterName
-    if (!existingCard || cardTimestamp > existingTimestamp) {
-      minterNameMap.set(minterName, card)
-    }
-  }
-
-  // Step 4: Filter cards to ensure each minterName is included only once
-  const finalCards = []
-  const seenMinterNames = new Set()
-
-  for (const [minterName, card] of minterNameMap.entries()) {
-    if (!seenMinterNames.has(minterName)) {
-      finalCards.push(card)
-      seenMinterNames.add(minterName) // Mark the minterName as seen
-    }
-  }
-
-  // Step 5: Sort by the most recent timestamp
-  finalCards.sort((a, b) => {
-    const timestampA = a.updated || a.created || 0
-    const timestampB = b.updated || b.created || 0
-    return timestampB - timestampA
-  })
-
-  return finalCards
+  return uniqueValidCards
 }
+
 
 
 //Main function to load the Minter Cards ----------------------------------------
@@ -247,12 +213,13 @@ const fetchAllEncryptedCards = async () => {
   encryptedCardsContainer.innerHTML = "<p>Loading cards...</p>";
 
   try {
-    const response = await qortalRequest({
-      action: "SEARCH_QDN_RESOURCES",
-      service: "MAIL_PRIVATE",
-      query: encryptedCardIdentifierPrefix,
-      mode: "ALL"
-    });
+    // const response = await qortalRequest({
+    //   action: "SEARCH_QDN_RESOURCES",
+    //   service: "MAIL_PRIVATE",
+    //   query: encryptedCardIdentifierPrefix,
+    //   mode: "ALL"
+    // })
+    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
       encryptedCardsContainer.innerHTML = "<p>No cards found.</p>";
@@ -262,19 +229,21 @@ const fetchAllEncryptedCards = async () => {
     // Validate cards and filter
     const validatedEncryptedCards = await Promise.all(
       response.map(async card => {
-        const isValid = await validateEncryptedCardIdentifier(card);
-        return isValid ? card : null;
+        const isValid = await validateEncryptedCardIdentifier(card)
+        return isValid ? card : null
       })
-    );
+    )
+    console.log(`validatedEncryptedCards:`, validatedEncryptedCards, `... running next filter...`)
 
     const validEncryptedCards = validatedEncryptedCards.filter(card => card !== null);
+    console.log(`validEncryptedcards:`, validEncryptedCards)
     
     if (validEncryptedCards.length === 0) {
       encryptedCardsContainer.innerHTML = "<p>No valid cards found.</p>";
       return;
     }
     const finalCards = await processCards(validEncryptedCards)
-
+    console.log(`finalCards:`,finalCards)
     // Display skeleton cards immediately
     encryptedCardsContainer.innerHTML = "";
     finalCards.forEach(card => {
@@ -371,14 +340,16 @@ const createEncryptedSkeletonCardHTML = (cardIdentifier) => {
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
 const fetchExistingEncryptedCard = async (minterName) => {
   try {
-    // Step 1: Perform the search
-    const response = await qortalRequest({
-      action: "SEARCH_QDN_RESOURCES",
-      service: "MAIL_PRIVATE",
-      identifier: encryptedCardIdentifierPrefix,
-      query: minterName,
-      mode: "ALL", 
-    });
+    // const response = await qortalRequest({
+    //   action: "SEARCH_QDN_RESOURCES",
+    //   service: "MAIL_PRIVATE",
+    //   identifier: encryptedCardIdentifierPrefix,
+    //   query: minterName,
+    //   mode: "ALL", 
+    // })
+
+    //CHANGED to searchSimple to speed up search results.
+    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0)
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
 
@@ -598,17 +569,18 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
 
 const getEncryptedCommentCount = async (cardIdentifier) => {
   try {
-    const response = await qortalRequest({
-      action: 'SEARCH_QDN_RESOURCES',
-      service: 'MAIL_PRIVATE',
-      query: `comment-${cardIdentifier}`,
-      mode: "ALL"
-    });
+    // const response = await qortalRequest({
+    //   action: 'SEARCH_QDN_RESOURCES',
+    //   service: 'MAIL_PRIVATE',
+    //   query: `comment-${cardIdentifier}`,
+    //   mode: "ALL"
+    // })
+    const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0)
     // Just return the count; no need to decrypt each comment here
-    return Array.isArray(response) ? response.length : 0;
+    return Array.isArray(response) ? response.length : 0
   } catch (error) {
-    console.error(`Error fetching comment count for ${cardIdentifier}:`, error);
-    return 0;
+    console.error(`Error fetching comment count for ${cardIdentifier}:`, error)
+    return 0
   }
 };
 
@@ -666,14 +638,17 @@ const postEncryptedComment = async (cardIdentifier) => {
 //Fetch the comments for a card with passed card identifier ----------------------------
 const fetchEncryptedComments = async (cardIdentifier) => {
   try {
-    const response = await qortalRequest({
-      action: 'SEARCH_QDN_RESOURCES',
-      service: 'MAIL_PRIVATE',
-      query: `comment-${cardIdentifier}`,
-      mode: "ALL"
-    });
+    // const response = await qortalRequest({
+    //   action: 'SEARCH_QDN_RESOURCES',
+    //   service: 'MAIL_PRIVATE',
+    //   query: `comment-${cardIdentifier}`,
+    //   mode: "ALL"
+    // })
+    const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0)
 
-    return response;
+    if (response) {
+      return response;
+    }
   } catch (error) {
     console.error(`Error fetching comments for ${cardIdentifier}:`, error);
     return [];
@@ -683,7 +658,9 @@ const fetchEncryptedComments = async (cardIdentifier) => {
 // display the comments on the card, with passed cardIdentifier to identify the card --------------
 const displayEncryptedComments = async (cardIdentifier) => {
   try {
+    
     const comments = await fetchEncryptedComments(cardIdentifier);
+    
     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`);
 
     // Fetch and display each comment
@@ -712,8 +689,8 @@ const displayEncryptedComments = async (cardIdentifier) => {
       commentsContainer.insertAdjacentHTML('beforeend', commentHTML);
     }
   } catch (error) {
-    console.error(`Error displaying comments for ${cardIdentifier}:`, error);
-    alert("Failed to load comments. Please try again.");
+    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error);
+    
   }
 };
 
@@ -757,7 +734,7 @@ const calculateAdminBoardPollResults = async (pollData, minterGroupMembers, mint
   // 4) Process votes
   for (const vote of pollData.votes) {
     const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey);
-    console.log(`voter address: ${voterAddress}, optionIndex: ${vote.optionIndex}`);
+    // console.log(`voter address: ${voterAddress}, optionIndex: ${vote.optionIndex}`);
 
     if (vote.optionIndex === 0) {
       if (adminAddresses.includes(voterAddress)) {

@@ -649,8 +649,8 @@ const generateAttachmentID = (room, fileIndex = null) => {
 
 const findMessagePage = async (room, identifier, limit) => {
   const { service, query } = getServiceAndQuery(room)
-
-  const allMessages = await searchAllWithOffset(service, query, 0, 0, room)
+ //TODO check that searchSimple change worked.
+  const allMessages = await searchSimple(service, query, '', 0, 0, room, 'false')
 
   const idx = allMessages.findIndex(msg => msg.identifier === identifier);
   if (idx === -1) {
@@ -746,7 +746,8 @@ const getServiceAndQuery = (room) => {
 };
 
 const fetchResourceList = async (service, query, limit, offset, room) => {
-  return await searchAllWithOffset(service, query, limit, offset, room);
+  //TODO check
+  return await searchSimple(service, query, '', limit, offset, room, 'false');
 };
 
 const handleNoMessagesScenario = (isPolling, page, response, messagesContainer) => {
