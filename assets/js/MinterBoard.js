@@ -32,7 +32,7 @@ const loadMinterBoardPage = async () => {
           <label for="card-header">Header:</label>
           <input type="text" id="card-header" maxlength="100" placeholder="Enter card header" required>
           <label for="card-content">Content:</label>
-          <textarea id="card-content" placeholder="Enter detailed information about why you deserve to be a minter..." required></textarea>
+          <textarea id="card-content" placeholder="Enter detailed information about why you would like to be a minter... the more the better, and links to things you have published on QDN will help a lot! Give the Minter Admins things to make decisions by!" required></textarea>
           <label for="card-links">Links (qortal://...):</label>
           <div id="links-container">
             <input type="text" class="card-link" placeholder="Enter QDN link">
@@ -333,12 +333,12 @@ const fetchExistingCard = async () => {
     // Changed to searchSimple to improve load times. 
     const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, `${userState.accountName}`, 0)
 
-    console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
+    console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`)
 
     // Step 2: Check if the response is an array and not empty
     if (!response || !Array.isArray(response) || response.length === 0) {
-      console.log("No cards found for the current user.");
-      return null;
+      console.log("No cards found for the current user.")
+      return null
     } else if (response.length === 1) { // we don't need to go through all of the rest of the checks and filtering nonsense if there's only a single result, just return it.
       return response[0]
     }
@@ -346,17 +346,17 @@ const fetchExistingCard = async () => {
     // Validate cards asynchronously, check that they are not comments, etc.
     const validatedCards = await Promise.all(
       response.map(async card => {
-        const isValid = await validateCardStructure(card);
-        return isValid ? card : null;
+        const isValid = await validateCardStructure(card)
+        return isValid ? card : null
       })
-    );
+    )
 
     // Filter out invalid cards
-    const validCards = validatedCards.filter(card => card !== null);
+    const validCards = validatedCards.filter(card => card !== null)
 
     if (validCards.length > 0) {
       // Sort by most recent timestamp
-      const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0];
+      const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0]
 
       // Fetch full card data
       const cardDataResponse = await qortalRequest({
@@ -364,23 +364,23 @@ const fetchExistingCard = async () => {
         name: userState.accountName, // User's account name
         service: "BLOG_POST",
         identifier: mostRecentCard.identifier
-      });
+      })
 
-      existingCardIdentifier = mostRecentCard.identifier;
-      existingCardData = cardDataResponse;
+      existingCardIdentifier = mostRecentCard.identifier
+      existingCardData = cardDataResponse
 
-      console.log("Full card data fetched successfully:", cardDataResponse);
+      console.log("Full card data fetched successfully:", cardDataResponse)
 
-      return cardDataResponse;
+      return cardDataResponse
     }
 
-    console.log("No valid cards found.");
-    return null;
+    console.log("No valid cards found.")
+    return null
   } catch (error) {
-    console.error("Error fetching existing card:", error);
-    return null;
+    console.error("Error fetching existing card:", error)
+    return null
   }
-};
+}
 
 // Validate that a card is indeed a card and not a comment. -------------------------------------
 const validateCardStructure = async (card) => {
@@ -390,42 +390,52 @@ const validateCardStructure = async (card) => {
     card.service === "BLOG_POST" &&
     card.identifier && !card.identifier.includes("comment") &&
     card.created
-  );
+  )
 }
 
 // Load existing card data passed, into the form for editing -------------------------------------
 const loadCardIntoForm = async (cardData) => {
-  console.log("Loading existing card data:", cardData);
-  document.getElementById("card-header").value = cardData.header;
-  document.getElementById("card-content").value = cardData.content;
+  console.log("Loading existing card data:", cardData)
+  document.getElementById("card-header").value = cardData.header
+  document.getElementById("card-content").value = cardData.content
 
-  const linksContainer = document.getElementById("links-container");
-  linksContainer.innerHTML = ""; // Clear previous links
+  const linksContainer = document.getElementById("links-container")
+  linksContainer.innerHTML = ""
   cardData.links.forEach(link => {
-    const linkInput = document.createElement("input");
-    linkInput.type = "text";
-    linkInput.className = "card-link";
+    const linkInput = document.createElement("input")
+    linkInput.type = "text"
+    linkInput.className = "card-link"
     linkInput.value = link;
     linksContainer.appendChild(linkInput);
-  });
+  })
 }
 
 // Main function to publish a new Minter Card -----------------------------------------------
 const publishCard = async () => {
+
+  const minterGroupData = await fetchMinterGroupMembers();
+  const minterGroupAddresses = minterGroupData.map(m => m.member); // array of addresses
+
+  // 2) check if user is a minter
+  const userAddress = userState.accountAddress;
+  if (minterGroupAddresses.includes(userAddress)) {
+    alert("You are already a Minter and cannot publish a new card!");
+    return;
+  }
   const header = document.getElementById("card-header").value.trim();
   const content = document.getElementById("card-content").value.trim();
   const links = Array.from(document.querySelectorAll(".card-link"))
     .map(input => input.value.trim())
-    .filter(link => link.startsWith("qortal://"));
+    .filter(link => link.startsWith("qortal://"))
 
   if (!header || !content) {
-    alert("Header and content are required!");
-    return;
+    alert("Header and content are required!")
+    return
   }
 
-  const cardIdentifier = isExistingCard ? existingCardIdentifier : `${cardIdentifierPrefix}-${await uid()}`;
-  const pollName = `${cardIdentifier}-poll`;
-  const pollDescription = `Mintership Board Poll for ${userState.accountName}`;
+  const cardIdentifier = isExistingCard ? existingCardIdentifier : `${cardIdentifierPrefix}-${await uid()}`
+  const pollName = `${cardIdentifier}-poll`
+  const pollDescription = `Mintership Board Poll for ${userState.accountName}`
 
   const cardData = {
     header,
@@ -434,14 +444,13 @@ const publishCard = async () => {
     creator: userState.accountName,
     timestamp: Date.now(),
     poll: pollName,
-  };
+  }
   
   try {
-
-    let base64CardData = await objectToBase64(cardData);
+    let base64CardData = await objectToBase64(cardData)
       if (!base64CardData) {
-        console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`);
-        base64CardData = btoa(JSON.stringify(cardData));
+        console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`)
+        base64CardData = btoa(JSON.stringify(cardData))
       }
     
     await qortalRequest({
@@ -450,7 +459,8 @@ const publishCard = async () => {
       service: "BLOG_POST",
       identifier: cardIdentifier,
       data64: base64CardData,
-    });
+    })
+
     if (!isExistingCard){
       await qortalRequest({
         action: "CREATE_POLL",
@@ -458,116 +468,266 @@ const publishCard = async () => {
         pollDescription,
         pollOptions: ['Yes, No'],
         pollOwnerAddress: userState.accountAddress,
-      });
-
-      alert("Card and poll published successfully!");
+      })
+      alert("Card and poll published successfully!")
     }
+
     if (isExistingCard){
       alert("Card Updated Successfully! (No poll updates are possible at this time...)")
     }
-    document.getElementById("publish-card-form").reset();
-    document.getElementById("publish-card-view").style.display = "none";
-    document.getElementById("cards-container").style.display = "flex";
-    await loadCards();
+
+    document.getElementById("publish-card-form").reset()
+    document.getElementById("publish-card-view").style.display = "none"
+    document.getElementById("cards-container").style.display = "flex"
+    await loadCards()
+
   } catch (error) {
-    console.error("Error publishing card or poll:", error);
-    alert("Failed to publish card and poll.");
+
+    console.error("Error publishing card or poll:", error)
+    alert("Failed to publish card and poll.")
   }
 }
 
-//Calculate the poll results passed from other functions with minterGroupMembers and minterAdmins ---------------------------
-const calculatePollResults = async (pollData, minterGroupMembers, minterAdmins) => {
-  const memberAddresses = minterGroupMembers.map(member => member.member)
-  const minterAdminAddresses = minterAdmins.map(member => member.member)
+const processPollData= async (pollData, minterGroupMembers, minterAdmins, creator) => {
+  if (!pollData || !Array.isArray(pollData.voteWeights) || !Array.isArray(pollData.votes)) {
+    console.warn("Poll data is missing or invalid. pollData:", pollData)
+    return {
+      adminYes: 0,
+      adminNo: 0,
+      minterYes: 0,
+      minterNo: 0,
+      totalYes: 0,
+      totalNo: 0,
+      totalYesWeight: 0,
+      totalNoWeight: 0,
+      detailsHtml: `<p>Poll data is invalid or missing.</p>`
+    }
+  }
+
+  const memberAddresses = minterGroupMembers.map(m => m.member)
+  const minterAdminAddresses = minterAdmins.map(m => m.member)
   const adminGroupsMembers = await fetchAllAdminGroupsMembers()
-  const groupAdminAddresses = adminGroupsMembers.map(member => member.member)
-  const adminAddresses = [];
-  adminAddresses.push(...minterAdminAddresses,...groupAdminAddresses);
+  const groupAdminAddresses = adminGroupsMembers.map(m => m.member)
+  const adminAddresses = [...minterAdminAddresses, ...groupAdminAddresses]
+  let adminYes = 0, adminNo = 0
+  let minterYes = 0, minterNo = 0
+  let yesWeight = 0, noWeight = 0
 
-  let adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, yesWeight = 0 , noWeight = 0
+  for (const w of pollData.voteWeights) {
+    if (w.optionName.toLowerCase() === 'yes') {
+      yesWeight = w.voteWeight
+    } else if (w.optionName.toLowerCase() === 'no') {
+      noWeight = w.voteWeight
+    }
+  }
 
-  pollData.voteWeights.forEach(weightData => {
-    if (weightData.optionName === 'Yes') {
-      yesWeight = weightData.voteWeight
-    } else if (weightData.optionName === 'No') {
-      noWeight = weightData.voteWeight
+  const voterPromises = pollData.votes.map(async (vote) => {
+    const optionIndex = vote.optionIndex; // 0 => yes, 1 => no
+    const voterPublicKey = vote.voterPublicKey
+    const voterAddress = await getAddressFromPublicKey(voterPublicKey)
+
+    if (optionIndex === 0) {
+      if (adminAddresses.includes(voterAddress)) {
+        adminYes++
+      } else if (memberAddresses.includes(voterAddress)) {
+        minterYes++
+      } else {
+        console.log(`voter ${voterAddress} is not a minter nor an admin... Not included in aggregates.`)
+      }
+    } else if (optionIndex === 1) {
+      if (adminAddresses.includes(voterAddress)) {
+        adminNo++
+      } else if (memberAddresses.includes(voterAddress)) {
+        minterNo++
+      } else {
+        console.log(`voter ${voterAddress} is not a minter nor an admin... Not included in aggregates.`)
+      }
+    }
+
+    let voterName = ''
+    try {
+      const nameInfo = await getNameFromAddress(voterAddress)
+      if (nameInfo) {
+        voterName = nameInfo
+        if (nameInfo === voterAddress) voterName = ''
+      }
+    } catch (err) {
+      console.warn(`No name for address ${voterAddress}`, err)
+    }
+
+    let blocksMinted = 0
+    try {
+      const addressInfo = await getAddressInfo(voterAddress)
+      blocksMinted = addressInfo?.blocksMinted || 0
+    } catch (e) {
+      console.warn(`Failed to get addressInfo for ${voterAddress}`, e)
+    }
+    const isAdmin = adminAddresses.includes(voterAddress)
+    const isMinter = memberAddresses.includes(voterAddress)
+    
+    return {
+      optionIndex,
+      voterPublicKey,
+      voterAddress,
+      voterName,
+      isAdmin,
+      isMinter,
+      blocksMinted
     }
   })
 
-  for (const vote of pollData.votes) {
-    const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey)
-    // console.log(`voter address: ${voterAddress}`)
+  const allVoters = await Promise.all(voterPromises)
+  const yesVoters = []
+  const noVoters = []
+  let totalMinterAndAdminYesWeight = 0
+  let totalMinterAndAdminNoWeight = 0
 
-    if (vote.optionIndex === 0) {
-      adminAddresses.includes(voterAddress) ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
-    } else if (vote.optionIndex === 1) {
-      adminAddresses.includes(voterAddress) ? adminNo++ : memberAddresses.includes(voterAddress) ? minterNo++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
+  for (const v of allVoters) {
+    if (v.optionIndex === 0) {
+      yesVoters.push(v)
+      totalMinterAndAdminYesWeight+=v.blocksMinted
+    } else if (v.optionIndex === 1) {
+      noVoters.push(v)
+      totalMinterAndAdminNoWeight+=v.blocksMinted
     }
   }
 
-  // TODO - create a new function to calculate the weights of each voting MINTER only. 
-  // This will give ALL weight whether voter is in minter group or not... 
-  // until that is changed on the core we must calculate manually. 
-  const totalYesWeight = yesWeight
-  const totalNoWeight = noWeight
-
+  yesVoters.sort((a,b) => b.blocksMinted - a.blocksMinted);
+  noVoters.sort((a,b) => b.blocksMinted - a.blocksMinted);
+  const yesTableHtml = buildVotersTableHtml(yesVoters, /* tableColor= */ "green")
+  const noTableHtml = buildVotersTableHtml(noVoters, /* tableColor= */ "red")
+  const detailsHtml = `
+    <div class="poll-details-container" id'"${creator}-poll-details">
+      <h1 style ="color:rgb(123, 123, 85); text-align: center; font-size: 2.0rem">${creator}'s</h1><h3 style="color: white; text-align: center; font-size: 1.8rem"> Support Poll Result Details</h3>
+      <h4 style="color: green; text-align: center;">Yes Vote Details</h4>
+      ${yesTableHtml}
+      <h4 style="color: red; text-align: center; margin-top: 2em;">No Vote Details</h4>
+      ${noTableHtml}
+    </div>
+  `
   const totalYes = adminYes + minterYes
   const totalNo = adminNo + minterNo
 
-  return { adminYes, adminNo, minterYes, minterNo, totalYes, totalNo, totalYesWeight, totalNoWeight }
+  return {
+    adminYes,
+    adminNo,
+    minterYes,
+    minterNo,
+    totalYes,
+    totalNo,
+    totalYesWeight: totalMinterAndAdminYesWeight,
+    totalNoWeight: totalMinterAndAdminNoWeight,
+    detailsHtml
+  }
 }
+
+const buildVotersTableHtml = (voters, tableColor) => {
+  if (!voters.length) {
+    return `<p>No voters here.</p>`;
+  }
+
+  // Decide extremely dark background for the <tbody>
+  let bodyBackground;
+  if (tableColor === "green") {
+    bodyBackground = "rgba(0, 18, 0, 0.8)" // near-black green
+  } else if (tableColor === "red") {
+    bodyBackground = "rgba(30, 0, 0, 0.8)" // near-black red
+  } else {
+    // fallback color if needed
+    bodyBackground = "rgba(40, 20, 10, 0.8)"
+  }
+
+  // tableColor is used for the <thead>, bodyBackground for the <tbody>
+  const minterColor = 'rgb(98, 122, 167)'
+  const adminColor = 'rgb(44, 209, 151)'
+  const userColor = 'rgb(102, 102, 102)'
+  return `
+    <table style="
+      width: 100%;
+      border-style: dotted;
+      border-width: 0.15rem;
+      border-color: #576b6f;
+      margin-bottom: 1em;
+      border-collapse: collapse;
+    ">
+      <thead style="background: ${tableColor}; color:rgb(238, 238, 238) ;">
+        <tr style="font-size: 1.5rem;">
+          <th style="padding: 0.1rem; text-align: center;">Voter Name/Address</th>
+          <th style="padding: 0.1rem; text-align: center;">Voter Type</th>
+          <th style="padding: 0.1rem; text-align: center;">Voter Weight(=BlocksMinted)</th>
+        </tr>
+      </thead>
+
+      <!-- Tbody with extremely dark green or red -->
+      <tbody style="background-color: ${bodyBackground}; color: #c6c6c6;">
+        ${voters
+          .map(v => {
+            const userType = v.isAdmin ? "Admin" : v.isMinter ? "Minter" : "User";
+            const pollName = v.pollName
+            const displayName =
+              v.voterName
+                ? v.voterName
+                : v.voterAddress
+            return `
+              <tr style="font-size: 1.2rem; border-width: 0.1rem; border-style: dotted; border-color: lightgrey; font-weight: bold;">
+                <td style="padding: 1.2rem; border-width: 0.1rem; border-style: dotted; border-color: lightgrey; text-align: center; 
+                color:${userType === 'Admin' ? adminColor : v.isMinter? minterColor : userColor };">${displayName}</td>
+                <td style="padding: 1.2rem; border-width: 0.1rem; border-style: dotted; border-color: lightgrey; text-align: center; 
+                color:${userType === 'Admin' ? adminColor : v.isMinter? minterColor : userColor };">${userType}</td>
+                <td style="padding: 1.2rem; border-width: 0.1rem; border-style: dotted; border-color: lightgrey; text-align: center; 
+                color:${userType === 'Admin' ? adminColor : v.isMinter? minterColor : userColor };">${v.blocksMinted}</td>
+              </tr>
+            `
+          })
+          .join("")}
+      </tbody>
+    </table>
+  `
+}
+
 
 // Post a comment on a card. ---------------------------------
 const postComment = async (cardIdentifier) => {
-  const commentInput = document.getElementById(`new-comment-${cardIdentifier}`);
-  const commentText = commentInput.value.trim();
-  if (!commentText) {
-    alert('Comment cannot be empty!');
-    return;
-  }
+  const commentInput = document.getElementById(`new-comment-${cardIdentifier}`)
+  const commentText = commentInput.value.trim()
 
+  if (!commentText) {
+    alert('Comment cannot be empty!')
+    return
+  }
   const commentData = {
     content: commentText,
     creator: userState.accountName,
     timestamp: Date.now(),
-  };
-
-  const commentIdentifier = `comment-${cardIdentifier}-${await uid()}`;
+  }
+  const commentIdentifier = `comment-${cardIdentifier}-${await uid()}`
 
   try {
-    const base64CommentData = await objectToBase64(commentData);
-      if (!base64CommentData) {
-        console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`);
-        base64CommentData = btoa(JSON.stringify(commentData));
-      }
-   
+    const base64CommentData = await objectToBase64(commentData)
+    if (!base64CommentData) {
+      console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`)
+      base64CommentData = btoa(JSON.stringify(commentData))
+    }
     await qortalRequest({
       action: 'PUBLISH_QDN_RESOURCE',
       name: userState.accountName,
       service: 'BLOG_POST',
       identifier: commentIdentifier,
       data64: base64CommentData,
-    });
+    })
 
-    alert('Comment posted successfully!');
-    commentInput.value = ''; // Clear input
-    // await displayComments(cardIdentifier); // Refresh comments - We don't need to do this as comments will be displayed only after confirmation.
+    alert('Comment posted successfully!')
+    commentInput.value = ''
   } catch (error) {
-    console.error('Error posting comment:', error);
-    alert('Failed to post comment.');
+    console.error('Error posting comment:', error)
+    alert('Failed to post comment.')
   }
-};
+}
 
 //Fetch the comments for a card with passed card identifier ----------------------------
 const fetchCommentsForCard = async (cardIdentifier) => {
   try {
-    // const response = await qortalRequest({
-    //   action: 'SEARCH_QDN_RESOURCES',
-    //   service: 'BLOG_POST',
-    //   query: `comment-${cardIdentifier}`,
-    //   mode: "ALL"
-    // })
-    const response = await searchSimple('BLOG_POST',`comment-${cardIdentifier}`, '', 0)
+    const response = await searchSimple('BLOG_POST',`comment-${cardIdentifier}`, '', 0, 0, '', 'false')
     return response
   } catch (error) {
     console.error(`Error fetching comments for ${cardIdentifier}:`, error)
@@ -579,172 +739,218 @@ const fetchCommentsForCard = async (cardIdentifier) => {
 const displayComments = async (cardIdentifier) => {
   try {
     const comments = await fetchCommentsForCard(cardIdentifier);
-    const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`);
-
-    // Fetch and display each comment
+    const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
+    
     for (const comment of comments) {
       const commentDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
         name: comment.name,
         service: "BLOG_POST",
         identifier: comment.identifier,
-      });
-      const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp);
-      //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
+      })
+      const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp)
       const commentHTML = `
         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
           <p><strong><u>${commentDataResponse.creator}</strong>:</p></u>
           <p>${commentDataResponse.content}</p>
           <p><i>${timestamp}</p></i>
         </div>
-      `;
-      commentsContainer.insertAdjacentHTML('beforeend', commentHTML);
+      `
+      commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
     }
+
   } catch (error) {
-    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error);
+    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
   }
-};
+}
 
 // Toggle comments from being shown or not, with passed cardIdentifier for comments being toggled --------------------
 const toggleComments = async (cardIdentifier) => {
-  const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`);
+  const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`)
   const commentButton = document.getElementById(`comment-button-${cardIdentifier}`)
 
-  if (!commentsSection || !commentButton) return;
-  const count = commentButton.dataset.commentCount; 
-  const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display);
+  if (!commentsSection || !commentButton) return
+  const count = commentButton.dataset.commentCount
+  const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display)
 
   if (isHidden) {
     // Show comments
-    commentButton.textContent = "LOADING...";
+    commentButton.textContent = "LOADING..."
     await displayComments(cardIdentifier);
-    commentsSection.style.display = 'block';
+    commentsSection.style.display = 'block'
     // Change the button text to 'HIDE COMMENTS'
-    commentButton.textContent = 'HIDE COMMENTS';
+    commentButton.textContent = 'HIDE COMMENTS'
   } else {
     // Hide comments
-    commentsSection.style.display = 'none';
-    commentButton.textContent = `COMMENTS (${count})`;
+    commentsSection.style.display = 'none'
+    commentButton.textContent = `COMMENTS (${count})`
   }
-};
+}
 
 const countComments = async (cardIdentifier) => {
   try {
-    // const response = await qortalRequest({
-    //   action: 'SEARCH_QDN_RESOURCES',
-    //   service: 'BLOG_POST',
-    //   query: `comment-${cardIdentifier}`,
-    //   mode: "ALL"
-    // })
-    // Changed to searchSimple to hopefully improve load times...
-    const response = await searchSimple('BLOG_POST', `comment-${cardIdentifier}`, '', 0)
-    // Just return the count; no need to decrypt each comment here
-    return Array.isArray(response) ? response.length : 0;
+    const response = await searchSimple('BLOG_POST', `comment-${cardIdentifier}`, '', 0, 0, '', 'false')
+    return Array.isArray(response) ? response.length : 0
   } catch (error) {
-    console.error(`Error fetching comment count for ${cardIdentifier}:`, error);
-    return 0;
+    console.error(`Error fetching comment count for ${cardIdentifier}:`, error)
+    return 0
   }
-};
+}
 
-const createModal = async () => {
+const createModal = (modalType='') => {
+  if (document.getElementById(`${modalType}-modal`)) {
+    return
+  }
+
+  const isIframe = (modalType === 'links')
+
   const modalHTML = `
-    <div id="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000;">
-      <div style="position: relative; margin: 10% auto; width: 95%; height: 80%; background: white; border-radius: 10px; overflow: hidden;">
-        <iframe id="modalContent" src="" style="width: 100%; height: 100%; border: none;"></iframe>
-        <button onclick="closeModal()" style="position: absolute; top: 10px; right: 10px; background: red; color: white; border: none; padding: 5px 10px; border-radius: 5px;">Close</button>
+    <div id="${modalType}-modal"
+         style="display: none;
+                position: fixed;
+                top: 0; left: 0;
+                width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.50);
+                z-index: 10000;">
+      <div id="${modalType}-modalContainer"
+           style="position: relative;
+                  margin: 10% auto;
+                  width: 80%; 
+                  height: 70%; 
+                  background:rgba(0, 0, 0, 0.80) ;
+                  border-radius: 10px;
+                  overflow: hidden;">
+        ${
+          isIframe
+            ? `<iframe id="${modalType}-modalContent" 
+                       src=""
+                       style="width: 100%; height: 100%; border: none;">
+               </iframe>`
+            : `<div id="${modalType}-modalContent" 
+                    style="width: 100%; height: 100%; overflow: auto;">
+               </div>`
+        }
+
+        <button onclick="closeModal('${modalType}')"
+                style="position: absolute; top: 0.2rem; right: 0.2rem;
+                       background:rgba(0, 0, 0, 0.66); color: white; border: none;
+                       font-size: 2.2rem;
+                       padding: 0.4rem 1rem; 
+                       border-radius: 0.33rem; 
+                       border-style: dashed; 
+                       border-color:rgb(213, 224, 225); 
+                       "
+                onmouseover="this.style.backgroundColor='rgb(73, 7, 7) '"
+                onmouseout="this.style.backgroundColor='rgba(5, 14, 11, 0.63) '">
+                
+          X
+        </button>
       </div>
     </div>
-  `;
-  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  `
+  document.body.insertAdjacentHTML('beforeend', modalHTML)
+
+  const modal = document.getElementById(`${modalType}-modal`)
+  window.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      closeModal(modalType)
+    }
+  })
 }
 
-// Function to open the modal
-const openModal = async (link) => {
-  const processedLink = await processLink(link) // Process the link to replace `qortal://` for rendering in modal
-  const modal = document.getElementById('modal');
-  const modalContent = document.getElementById('modalContent');
-  modalContent.src = processedLink; // Set the iframe source to the link
-  modal.style.display = 'block'; // Show the modal
+
+const openLinksModal = async (link) => {
+  const processedLink = await processLink(link)
+  const modal = document.getElementById('links-modal')
+  const modalContent = document.getElementById('links-modalContent')
+  modalContent.src = processedLink
+  modal.style.display = 'block'
 }
 
-// Function to close the modal
-const closeModal = async () => {
-  const modal = document.getElementById('modal');
-  const modalContent = document.getElementById('modalContent');
-  modal.style.display = 'none'; // Hide the modal
-  modalContent.src = ''; // Clear the iframe source
+const closeModal = async (modalType='links') => {
+  const modal = document.getElementById(`${modalType}-modal`)
+  const modalContent = document.getElementById(`${modalType}-modalContent`)
+  if (modal) {
+    modal.style.display = 'none'
+  }
+  if (modalContent) {
+    modalContent.src = ''
+  }
 }
 
 const processLink = async (link) => {
   if (link.startsWith('qortal://')) {
-    const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
+    const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/)
     if (match) {
-      const firstParam = match[1].toUpperCase(); 
-      const remainingPath = match[2] || ""; 
-      const themeColor = window._qdnTheme || 'default'; // Fallback to 'default' if undefined
+      const firstParam = match[1].toUpperCase()
+      const remainingPath = match[2] || ""
+      const themeColor = window._qdnTheme || 'default'
 
-      // Simulating async operation if needed
-      await new Promise(resolve => setTimeout(resolve, 10));
-      
-      // Append theme as a query parameter
-      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`;
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`
     }
   }
-  return link;
-};
+  return link
+}
 
-// Hash the name and map it to a dark pastel color
-const generateDarkPastelBackgroundBy = (name) => {
-  // 1) Basic string hashing
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash << 5) - hash + name.charCodeAt(i);
-    hash |= 0; // Convert to 32-bit integer
+const togglePollDetails = (cardIdentifier) => {  
+  const detailsDiv = document.getElementById(`poll-details-${cardIdentifier}`)
+  const modal = document.getElementById(`poll-details-modal`)
+  const modalContent = document.getElementById(`poll-details-modalContent`)
+  
+  if (!detailsDiv || !modal || !modalContent) return
+
+  // modalContent.appendChild(detailsDiv)
+  modalContent.innerHTML = detailsDiv.innerHTML
+  modal.style.display = 'block'
+  window.onclick = (event) => {
+    if (event.target === modal) {
+      modal.style.display = 'none'
+    }
   }
-  const safeHash = Math.abs(hash);
+}
 
-  // 2) Restrict hue to a 'blue-ish' range (150..270 = 120 degrees total)
-  
-  const hueSteps = 69.69; 
-  const hueIndex = safeHash % hueSteps; 
-  
-  const hueRange = 288; 
-  const hue = 140 + (hueIndex * (hueRange / hueSteps)); 
-  
+const generateDarkPastelBackgroundBy = (name) => {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i)
+    hash |= 0
+  }
+  const safeHash = Math.abs(hash)
+  const hueSteps = 69.69 
+  const hueIndex = safeHash % hueSteps 
+  const hueRange = 288
+  const hue = 140 + (hueIndex * (hueRange / hueSteps))
 
-  // 3) Satura­tion:
-  const satSteps = 13.69; 
-  const satIndex = safeHash % satSteps;
-  const saturation = 18 + (satIndex * 1.333);
+  const satSteps = 13.69
+  const satIndex = safeHash % satSteps
+  const saturation = 18 + (satIndex * 1.333)
 
-  // 4) Lightness:
-  const lightSteps = 3.69; 
-  const lightIndex = safeHash % lightSteps;
-  const lightness = 7 + lightIndex;
+  const lightSteps = 3.69
+  const lightIndex = safeHash % lightSteps
+  const lightness = 7 + lightIndex
 
-  // 5) Return the HSL color string
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-};
-
-
-
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, BgColor) => {
   const { header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
-  // const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
   const avatarHtml = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
-    <button onclick="openModal('${link}')">
+    <button onclick="openLinksModal('${link}')">
       ${`Link ${index + 1} - ${link}`}
     </button>
-  `).join("");
+  `).join("")
 
-  const minterGroupMembers = await fetchMinterGroupMembers();
-  const minterAdmins = await fetchMinterGroupAdmins();
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0 } = await calculatePollResults(pollResults, minterGroupMembers, minterAdmins)
-  await createModal()
+  const minterGroupMembers = await fetchMinterGroupMembers()
+  const minterAdmins = await fetchMinterGroupAdmins()
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator)
+  createModal('links')
+  createModal('poll-details')
+
   return `
   <div class="minter-card" style="background-color: ${BgColor}">
     <div class="minter-card-header">
@@ -762,6 +968,10 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
     </div>
     <div class="results-header support-header"><h5>CURRENT RESULTS</h5></div>
     <div class="minter-card-results">
+      <button onclick="togglePollDetails('${cardIdentifier}')">Display Poll Details</button>
+      <div id="poll-details-${cardIdentifier}" style="display: none;">
+        ${detailsHtml}
+      </div>
       <div class="admin-results">
         <span class="admin-yes">Admin Yes: ${adminYes}</span>
         <span class="admin-no">Admin No: ${adminNo}</span>

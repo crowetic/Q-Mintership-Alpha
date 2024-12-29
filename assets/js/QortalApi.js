@@ -147,6 +147,32 @@ const getUserAddress = async () => {
     }
 }
 
+const getAddressInfo = async (address) => {
+    try {
+        const response = await fetch (`${baseUrl}/addresses/${address}`, {
+            headers: { 'Accept': 'application/json' },
+            method: 'GET',
+        })
+        const addressData = await response.json()
+        console.log(`address data:`,addressData)
+
+        return {
+            address: addressData.address,
+            reference: addressData.reference,
+            publicKey: addressData.publicKey,
+            defaultGroupId: addressData.defaultGroupId,
+            flags: addressData.flags,
+            level: addressData.level,
+            blocksMinted: addressData.blocksMinted,
+            blocksMintedAdjustment: addressData.blocksMintedAdjustment,
+            blocksMintedPenalty: addressData.blocksMintedPenalty
+        }
+    } catch(error){
+        console.error(error)
+        throw error
+    }
+}
+
 const fetchOwnerAddressFromName = async (name) => {
     console.log('fetchOwnerAddressFromName called')
     console.log('name:', name)
@@ -324,7 +350,7 @@ const login = async () => {
     }
 }
 
-const getNamesFromAddress = async (address) => {
+const getNameFromAddress = async (address) => {
 try {
     const response = await fetch(`${baseUrl}/names/address/${address}?limit=20`, {
     method: 'GET',
@@ -424,7 +450,7 @@ const fetchMinterGroupMembers = async () => {
       console.error("Error fetching minter group members:", error)
       return [] // Return an empty array to prevent further errors
     }
-  }
+}
   
 
 const fetchAllGroups = async (limit) => {

@@ -162,11 +162,11 @@ const loadOrFetchAdminGroupsData = async () => {
   }
 }
 
-const extractCardsMinterName = (cardIdentifier) => {
+const extractEncryptedCardsMinterName = (cardIdentifier) => {
   // Ensure the identifier starts with the prefix
-  if (!cardIdentifier.startsWith(`${encryptedCardIdentifierPrefix}-`)) {
-    throw new Error('Invalid identifier format or prefix mismatch');
-  }
+  // if (!cardIdentifier.startsWith(`${encryptedCardIdentifierPrefix}-`)) {
+  //   throw new Error('Invalid identifier format or prefix mismatch');
+  // }
   // Split the identifier into parts
   const parts = cardIdentifier.split('-');
   // Ensure the format has at least 3 parts
@@ -176,7 +176,7 @@ const extractCardsMinterName = (cardIdentifier) => {
   
   if (parts.slice(2, -1).join('-') === 'TOPIC') {
     console.log(`TOPIC found in identifier: ${cardIdentifier} - not including in duplicatesList`)
-    return 'topic'
+    return
   }
   // Extract minterName (everything from the second part to the second-to-last part)
   const minterName = parts.slice(2, -1).join('-');
@@ -243,6 +243,7 @@ const fetchAllEncryptedCards = async () => {
       return;
     }
     const finalCards = await processCards(validEncryptedCards)
+    
     console.log(`finalCards:`,finalCards)
     // Display skeleton cards immediately
     encryptedCardsContainer.innerHTML = "";
@@ -254,6 +255,8 @@ const fetchAllEncryptedCards = async () => {
     // Fetch and update each card
     finalCards.forEach(async card => {
       try {
+        const hasMinterName = await extractEncryptedCardsMinterName(card.identifier)
+        if (hasMinterName) existingCardMinterNames.push(hasMinterName)
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
           name: card.name,
@@ -349,7 +352,7 @@ const fetchExistingEncryptedCard = async (minterName) => {
     // })
 
     //CHANGED to searchSimple to speed up search results.
-    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0)
+    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, minterName, 0)
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
 
@@ -442,7 +445,7 @@ const validateMinterName = async(minterName) => {
 
 const publishEncryptedCard = async (isTopicModePassed = false) => {
   // If the user wants it to be a topic, we set global isTopic = true, else false
-  isTopic = isTopicModePassed;
+  isTopic = isTopicModePassed || isTopic
 
   const minterNameInput = document.getElementById("minter-name-input").value.trim();
   const header = document.getElementById("card-header").value.trim();
@@ -461,23 +464,23 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
 
   // If not topic mode, validate the user actually entered a valid Minter name
   if (!isTopic) {
-    publishedMinterName = await validateMinterName(minterNameInput);
+    publishedMinterName = await validateMinterName(minterNameInput)
     if (!publishedMinterName) {
-      alert(`"${minterNameInput}" doesn't seem to be a valid Minter name. Please check or use topic mode.`);
-      return;
+      alert(`"${minterNameInput}" doesn't seem to be a valid Minter name. Please check or use topic mode.`)
+      return
     }
     // Also check for existing card if not topic
     if (!isExistingEncryptedCard && existingCardMinterNames.includes(publishedMinterName)) {
       const updateCard = confirm(
         `Minter Name: ${publishedMinterName} already has a card. Update or Cancel?`
-      );
+      )
       if (updateCard) {
-        await fetchExistingEncryptedCard(publishedMinterName);
-        await loadEncryptedCardIntoForm();
-        isExistingEncryptedCard = true;
-        return;
+        await fetchExistingEncryptedCard(publishedMinterName)
+        await loadEncryptedCardIntoForm()
+        isExistingEncryptedCard = true
+        return
       } else {
-        return;
+        return
       }
     }
   }
@@ -485,12 +488,12 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
   // Determine final card identifier
   const newCardIdentifier = isTopic
     ? `${encryptedCardIdentifierPrefix}-TOPIC-${await uid()}`
-    : `${encryptedCardIdentifierPrefix}-${publishedMinterName}-${await uid()}`;
+    : `${encryptedCardIdentifierPrefix}-${publishedMinterName}-${await uid()}`
 
-  const cardIdentifier = isExistingEncryptedCard ? existingEncryptedCardIdentifier : newCardIdentifier;
+  const cardIdentifier = isExistingEncryptedCard ? existingEncryptedCardIdentifier : newCardIdentifier
 
   // Build cardData
-  const pollName = `${cardIdentifier}-poll`;
+  const pollName = `${cardIdentifier}-poll`
   const cardData = {
     minterName: publishedMinterName,
     header,
@@ -500,7 +503,7 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
     timestamp: Date.now(),
     poll: pollName,
     topicMode: isTopic
-  };
+  }
 
   try {
     // Convert to base64 or fallback
@@ -523,7 +526,6 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       }
 
       verifiedAdminPublicKeys = loadedAdminKeys
-
     }
 
     await qortalRequest({
@@ -534,7 +536,7 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       data64: base64CardData,
       encrypt: true,
       publicKeys: verifiedAdminPublicKeys
-    });
+    })
 
     // Possibly create a poll if it’s a brand new card
     if (!isExistingEncryptedCard) {
@@ -544,18 +546,20 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
         pollDescription: `Admin Board Poll Published By ${userState.accountName}`,
         pollOptions: ["Yes, No"],
         pollOwnerAddress: userState.accountAddress
-      });
-      alert("Card and poll published successfully!");
+      })
+      alert("Card and poll published successfully!")
       
       // If it’s a real Minter name, store it so we know we have a card for them
       if (!isTopic) {
-        existingCardMinterNames.push(publishedMinterName);
+        if (!existingCardMinterNames.contains(publishedMinterName)) {
+          existingCardMinterNames.push(publishedMinterName)
+        }
       }
+
     } else {
       alert("Card updated successfully! (No poll updates possible currently...)");
     }
 
-    // Cleanup UI
     document.getElementById("publish-card-form").reset();
     document.getElementById("publish-card-view").style.display = "none";
     document.getElementById("encrypted-cards-container").style.display = "flex";
@@ -569,40 +573,31 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
 
 const getEncryptedCommentCount = async (cardIdentifier) => {
   try {
-    // const response = await qortalRequest({
-    //   action: 'SEARCH_QDN_RESOURCES',
-    //   service: 'MAIL_PRIVATE',
-    //   query: `comment-${cardIdentifier}`,
-    //   mode: "ALL"
-    // })
     const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0)
-    // Just return the count; no need to decrypt each comment here
+    
     return Array.isArray(response) ? response.length : 0
   } catch (error) {
     console.error(`Error fetching comment count for ${cardIdentifier}:`, error)
     return 0
   }
-};
+}
 
 // Post a comment on a card. ---------------------------------
 const postEncryptedComment = async (cardIdentifier) => {
-  const commentInput = document.getElementById(`new-comment-${cardIdentifier}`);
-  const commentText = commentInput.value.trim();
+  const commentInput = document.getElementById(`new-comment-${cardIdentifier}`)
+  const commentText = commentInput.value.trim()
+
   if (!commentText) {
-    alert('Comment cannot be empty!');
-    return;
+    alert('Comment cannot be empty!')
+    return
   }
-
   const postTimestamp = Date.now()
-  console.log(`timestmp to be posted: ${postTimestamp}`)
-
   const commentData = {
     content: commentText,
     creator: userState.accountName,
     timestamp: postTimestamp,
-  };
-
-  const commentIdentifier = `comment-${cardIdentifier}-${await uid()}`;
+  }
+  const commentIdentifier = `comment-${cardIdentifier}-${await uid()}`
 
   if (!Array.isArray(adminPublicKeys) || (adminPublicKeys.length === 0) || (!adminPublicKeys)) {
     console.log('adminPpublicKeys variable failed checks, calling for admin public keys from API (comment)',adminPublicKeys)
@@ -611,59 +606,49 @@ const postEncryptedComment = async (cardIdentifier) => {
   } 
 
   try {
-  const base64CommentData = await objectToBase64(commentData);
+    const base64CommentData = await objectToBase64(commentData)
     if (!base64CommentData) {
-      console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`);
-      base64CommentData = btoa(JSON.stringify(commentData));
+      console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`)
+      base64CommentData = btoa(JSON.stringify(commentData))
     }
-  
-  await qortalRequest({
-    action: "PUBLISH_QDN_RESOURCE",
-    name: userState.accountName,
-    service: "MAIL_PRIVATE",
-    identifier: commentIdentifier,
-    data64: base64CommentData,
-    encrypt: true,
-    publicKeys: adminPublicKeys
-  });
 
-  alert('Comment posted successfully!');
-  commentInput.value = ''; // Clear input
+    await qortalRequest({
+      action: "PUBLISH_QDN_RESOURCE",
+      name: userState.accountName,
+      service: "MAIL_PRIVATE",
+      identifier: commentIdentifier,
+      data64: base64CommentData,
+      encrypt: true,
+      publicKeys: adminPublicKeys
+    })
+    alert('Comment posted successfully!')
+    commentInput.value = ''
+    
   } catch (error) {
-    console.error('Error posting comment:', error);
-    alert('Failed to post comment.');
+      console.error('Error posting comment:', error)
+      alert('Failed to post comment.')
   }
-};
+}
 
 //Fetch the comments for a card with passed card identifier ----------------------------
 const fetchEncryptedComments = async (cardIdentifier) => {
   try {
-    // const response = await qortalRequest({
-    //   action: 'SEARCH_QDN_RESOURCES',
-    //   service: 'MAIL_PRIVATE',
-    //   query: `comment-${cardIdentifier}`,
-    //   mode: "ALL"
-    // })
     const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0)
-
     if (response) {
       return response;
     }
   } catch (error) {
-    console.error(`Error fetching comments for ${cardIdentifier}:`, error);
-    return [];
+    console.error(`Error fetching comments for ${cardIdentifier}:`, error)
+    return []
   }
-};
+}
 
 // display the comments on the card, with passed cardIdentifier to identify the card --------------
 const displayEncryptedComments = async (cardIdentifier) => {
   try {
+    const comments = await fetchEncryptedComments(cardIdentifier)
+    const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
     
-    const comments = await fetchEncryptedComments(cardIdentifier);
-    
-    const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`);
-
-    // Fetch and display each comment
     for (const comment of comments) {
       const commentDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
@@ -671,13 +656,11 @@ const displayEncryptedComments = async (cardIdentifier) => {
         service: "MAIL_PRIVATE",
         identifier: comment.identifier,
         encoding: "base64"
-      });
+      })
 
       const decryptedCommentData = await decryptAndParseObject(commentDataResponse)
-
       const timestampCheck = comment.updated || comment.created || 0
-      const timestamp = await timestampToHumanReadableDate(timestampCheck);
-
+      const timestamp = await timestampToHumanReadableDate(timestampCheck)
       //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
       const commentHTML = `
         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
@@ -685,201 +668,120 @@ const displayEncryptedComments = async (cardIdentifier) => {
           <p>${decryptedCommentData.content}</p>
           <p><i>${timestamp}</p></i>
         </div>
-      `;
-      commentsContainer.insertAdjacentHTML('beforeend', commentHTML);
+      `
+      commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
     }
   } catch (error) {
-    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error);
-    
+    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
   }
-};
-
-const calculateAdminBoardPollResults = async (pollData, minterGroupMembers, minterAdmins) => {
-  // 1) Validate pollData structure
-  if (!pollData || !Array.isArray(pollData.voteWeights) || !Array.isArray(pollData.votes)) {
-    console.warn("Poll data is missing or invalid. pollData:", pollData);
-    return {
-      adminYes: 0,
-      adminNo: 0,
-      minterYes: 0,
-      minterNo: 0,
-      totalYes: 0,
-      totalNo: 0,
-      totalYesWeight: 0,
-      totalNoWeight: 0
-    };
-  }
-
-  // 2) Prepare admin & minter addresses
-  const memberAddresses = minterGroupMembers.map(member => member.member);
-  const minterAdminAddresses = minterAdmins.map(member => member.member);
-  const adminGroupsMembers = await fetchAllAdminGroupsMembers();
-  const groupAdminAddresses = adminGroupsMembers.map(member => member.member);
-  const adminAddresses = [];
-  adminAddresses.push(...minterAdminAddresses, ...groupAdminAddresses);
-
-  let adminYes = 0, adminNo = 0;
-  let minterYes = 0, minterNo = 0;
-  let yesWeight = 0, noWeight = 0;
-
-  // 3) Process voteWeights
-  pollData.voteWeights.forEach(weightData => {
-    if (weightData.optionName === 'Yes') {
-      yesWeight = weightData.voteWeight;
-    } else if (weightData.optionName === 'No') {
-      noWeight = weightData.voteWeight;
-    }
-  });
-
-  // 4) Process votes
-  for (const vote of pollData.votes) {
-    const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey);
-    // console.log(`voter address: ${voterAddress}, optionIndex: ${vote.optionIndex}`);
-
-    if (vote.optionIndex === 0) {
-      if (adminAddresses.includes(voterAddress)) {
-        adminYes++;
-      } else if (memberAddresses.includes(voterAddress)) {
-        minterYes++;
-      } else {
-        console.log(`voter ${voterAddress} is not a minter nor an admin... Not including results...`);
-      }
-    } else if (vote.optionIndex === 1) {
-      if (adminAddresses.includes(voterAddress)) {
-        adminNo++;
-      } else if (memberAddresses.includes(voterAddress)) {
-        minterNo++;
-      } else {
-        console.log(`voter ${voterAddress} is not a minter nor an admin... Not including results...`);
-      }
-    }
-  }
-
-  // 5) Summaries
-  const totalYesWeight = yesWeight;
-  const totalNoWeight = noWeight;
-  const totalYes = adminYes + minterYes;
-  const totalNo = adminNo + minterNo;
-
-  return {
-    adminYes,
-    adminNo,
-    minterYes,
-    minterNo,
-    totalYes,
-    totalNo,
-    totalYesWeight,
-    totalNoWeight
-  };
-};
+}
 
 const toggleEncryptedComments = async (cardIdentifier) => {
   const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`)
   const commentButton = document.getElementById(`comment-button-${cardIdentifier}`)
 
-  if (!commentsSection || !commentButton) return;
-  const count = commentButton.dataset.commentCount; 
-  const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display);
+  if (!commentsSection || !commentButton) return
+
+  const count = commentButton.dataset.commentCount;
+  const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display)
 
   if (isHidden) {
     // Show comments
-    commentButton.textContent = "LOADING...";
-    await displayEncryptedComments(cardIdentifier);
-    commentsSection.style.display = 'block';
+    commentButton.textContent = "LOADING..."
+    await displayEncryptedComments(cardIdentifier)
+    commentsSection.style.display = 'block'
     // Change the button text to 'HIDE COMMENTS'
-    commentButton.textContent = 'HIDE COMMENTS';
+    commentButton.textContent = 'HIDE COMMENTS'
   } else {
     // Hide comments
-    commentsSection.style.display = 'none';
-    commentButton.textContent = `COMMENTS (${count})`;
+    commentsSection.style.display = 'none'
+    commentButton.textContent = `COMMENTS (${count})`
   }
-};
+}
 
 const createLinkDisplayModal = async () => {
   const modalHTML = `
-    <div id="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000;">
+    <div id="links-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000;">
       <div style="position: relative; margin: 10% auto; width: 95%; height: 80%; background: white; border-radius: 10px; overflow: hidden;">
-        <iframe id="modalContent" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+        <iframe id="links-modalContent" src="" style="width: 100%; height: 100%; border: none;"></iframe>
         <button onclick="closeLinkDisplayModal()" style="position: absolute; top: 10px; right: 10px; background: red; color: white; border: none; padding: 5px 10px; border-radius: 5px;">Close</button>
       </div>
     </div>
-  `;
-  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  `
+  document.body.insertAdjacentHTML('beforeend', modalHTML)
 }
 
 // Function to open the modal
 const openLinkDisplayModal = async (link) => {
   const processedLink = await processQortalLinkForRendering(link) // Process the link to replace `qortal://` for rendering in modal
-  const modal = document.getElementById('modal');
-  const modalContent = document.getElementById('modalContent');
+  const modal = document.getElementById('links-modal');
+  const modalContent = document.getElementById('links-modalContent');
   modalContent.src = processedLink; // Set the iframe source to the link
   modal.style.display = 'block'; // Show the modal
 }
 
 // Function to close the modal
 const closeLinkDisplayModal = async () => {
-  const modal = document.getElementById('modal');
-  const modalContent = document.getElementById('modalContent');
+  const modal = document.getElementById('links-modal');
+  const modalContent = document.getElementById('links-modalContent');
   modal.style.display = 'none'; // Hide the modal
   modalContent.src = ''; // Clear the iframe source
 }
 
-// const processQortalLinkForRendering = async (link) => {
-//   if (link.startsWith('qortal://')) {
-//     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
-//     if (match) {
-//       const firstParam = match[1].toUpperCase(); // Convert to uppercase
-//       const remainingPath = match[2] || ""; // Rest of the URL
-//       // Perform any asynchronous operation if necessary
-//       await new Promise(resolve => setTimeout(resolve, 10)); // Simulating async operation
-//       return `/render/${firstParam}${remainingPath}`;
-//     }
-//   }
-//   return link; // Return unchanged if not a Qortal link
-// }
-
 const processQortalLinkForRendering = async (link) => {
   if (link.startsWith('qortal://')) {
-    const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
+    const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/)
     if (match) {
-      const firstParam = match[1].toUpperCase(); 
-      const remainingPath = match[2] || ""; 
-      const themeColor = window._qdnTheme || 'default'; // Fallback to 'default' if undefined
-
+      const firstParam = match[1].toUpperCase();
+      const remainingPath = match[2] || ""
+      const themeColor = window._qdnTheme || 'default' // Fallback to 'default' if undefined
       // Simulating async operation if needed
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 10))
       
-      // Append theme as a query parameter
-      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`;
+      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`
     }
   }
-  return link;
-};
+  return link
+}
 
-async function getMinterAvatar(minterName) {
-  const avatarUrl = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`;
-  
+const getMinterAvatar = async (minterName) => {
+  const avatarUrl = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`
   try {
-    const response = await fetch(avatarUrl, { method: 'HEAD' });
+    const response = await fetch(avatarUrl, { method: 'HEAD' })
+
     if (response.ok) {
-      // Avatar exists, return the image HTML
-      return `<img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">`;
+      return `<img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">`
     } else {
-      // Avatar not found or no permission
-      return '';
+      return ''
     }
+
   } catch (error) {
-    console.error('Error checking avatar availability:', error);
-    return '';
+    console.error('Error checking avatar availability:', error)
+    return ''
   }
 }
+
+// const togglePollDetails = (cardIdentifier) => {  
+//   const detailsDiv = document.getElementById(`poll-details-${cardIdentifier}`)
+//   const modal = document.getElementById(`poll-details-modal`)
+//   const modalContent = document.getElementById(`poll-details-modalContent`)
+  
+//   if (!detailsDiv || !modal || !modalContent) return
+
+//   modalContent.appendChild(detailsDiv)
+//   modal.style.display = 'block'
+//   window.onclick = (event) => {
+//     if (event.target === modal) {
+//       modal.style.display = 'none'
+//     }
+//   }
+// }
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
   const { minterName, header, content, links, creator, timestamp, poll, topicMode } = cardData
   const formattedDate = new Date(timestamp).toLocaleString()
   const minterAvatar = !topicMode ? await getMinterAvatar(minterName) : null
-  // const creatorAvatar = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
   const creatorAvatar = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
     <button onclick="openLinkDisplayModal('${link}')">
@@ -890,15 +792,14 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   const isUndefinedUser = (minterName === 'undefined')
 
   const hasTopicMode = Object.prototype.hasOwnProperty.call(cardData, 'topicMode')
-  // 2) Decide if this card is showing as "Topic" or "Name"
+
   let showTopic = false
+
   if (hasTopicMode) {
-    // If present, see if it's actually "true" or true
-    const modeVal = cardData.topicMode;
+    const modeVal = cardData.topicMode
     showTopic = (modeVal === true || modeVal === 'true')
   } else {
     if (!isUndefinedUser) {
-      // No topicMode => older card => default to Name
       showTopic = false
     }
   }
@@ -915,8 +816,9 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
 
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0 } = await calculateAdminBoardPollResults(pollResults, minterGroupMembers, minterAdmins)
-  await createModal()
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator)
+  createModal('links')
+  createModal('poll-details')
   return `
   <div class="admin-card" style="background-color: ${cardColorCode}">
     <div class="minter-card-header">
@@ -935,6 +837,10 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
     </div>
     <div class="results-header support-header"><h5>CURRENT RESULTS</h5></div>
     <div class="minter-card-results">
+      <button onclick="togglePollDetails('${cardIdentifier}')">Display Poll Details</button>
+      <div id="poll-details-${cardIdentifier}" style="display: none;">
+        ${detailsHtml}
+      </div>
       <div class="admin-results">
         <span class="admin-yes">Admin Support: ${adminYes}</span>
         <span class="admin-no">Admin Against: ${adminNo}</span>

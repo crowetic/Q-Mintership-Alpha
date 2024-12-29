@@ -755,6 +755,30 @@ body {
   color: #dddddd;
 }
 
+.minter-card-results button {
+  color: white;
+  background-color: rgb(48, 60, 63);
+  border-radius: 8px;
+  border-color: white;
+  border-style: groove;
+  font-size: 1.1em;
+  padding: 0.6vh 1.2vh;
+  margin: 0.15vh;
+  cursor: pointer;
+}
+
+.minter-card-results button:hover {
+  color: rgb(112, 113, 100);
+  background-color: rgb(0, 0, 0);
+  border-radius: 8px;
+  border-color: white;
+  border-style: inset;
+  font-size: 1.1em;
+  padding: 0.6vh 1.2vh;
+  margin: 0.15vh;
+  cursor: pointer;
+}
+
 .minter-card .info {
   background-color: #2a2a2a; /* Very dark grey background */
   border: 1px solid #d3d3d3; /* Light grey border */
