@@ -370,12 +370,12 @@
 
 .attachment button {
     align-self: flex-end;
-    margin-top: 1vh;
-    background-color: #0f4c41;
+    margin-top: 0.8vh;
+    background-color: #0f364c;
     color: #ffffff;
-    border: dotted;
+    border-style: ridge;
     border-radius: 1vh;
-    padding: 0.3vh 0.6vh;
+    padding: 0.15vh 0.3vh;
     cursor: pointer;
 }
 

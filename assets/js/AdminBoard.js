@@ -1,7 +1,7 @@
 // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
 const isEncryptedTestMode = false
 const encryptedCardIdentifierPrefix = "card-MAC"
-let isExistingEncryptedCard = false
+let isUpdateCard = false
 let existingDecryptedCardData = {}
 let existingEncryptedCardIdentifier = {}
 let cardMinterName = {}
@@ -19,7 +19,7 @@ const loadAdminBoardPage = async () => {
   for (let i = bodyChildren.length - 1; i >= 0; i--) {
       const child = bodyChildren[i];
       if (!child.classList.contains("menu")) {
-      child.remove();
+      child.remove()
       }
   }
 
@@ -35,17 +35,17 @@ const loadAdminBoardPage = async () => {
     <div id="encrypted-cards-container" class="cards-container" style="margin-top: 20px;"></div>
     <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
         <form id="publish-card-form">
-        <h3>Create or Update Your Minter Card</h3>
+        <h3>Create or Update an Admin Card</h3>
         <div class="publish-card-checkbox" style="margin-top: 1em;">
           <input type="checkbox" id="topic-checkbox" name="topicMode" />
           <label for="topic-checkbox">Is this a Topic instead of a Minter?</label>
         </div>
-        <label for="minter-name-input">Input Topic or Minter Name:</label>
-        <input type="text" id="minter-name-input" maxlength="100" placeholder="Enter Topic or Minter's Name" required>
+        <label for="minter-name-input">Input TOPIC or NAME:</label>
+        <input type="text" id="minter-name-input" maxlength="100" placeholder="input NAME or TOPIC" required>
         <label for="card-header">Header:</label>
         <input type="text" id="card-header" maxlength="100" placeholder="Explain main point/issue" required>
         <label for="card-content">Content:</label>
-        <textarea id="card-content" placeholder="Enter any information you like...You may also attach links to more in-depth information, etc. (Links will pop-up in a custom in-app viewer upon being clicked.)" required></textarea>
+        <textarea id="card-content" placeholder="Enter any information you like... CHECK THE TOPIC CHECKBOX if you do not want to publish a NAME card. NAME cards are verified and can only be one per name. Links are displayed in in-app pop-up." required></textarea>
         <label for="card-links">Links (qortal://...):</label>
         <div id="links-container">
             <input type="text" class="card-link" placeholder="Enter QDN link">
@@ -71,7 +71,7 @@ const loadAdminBoardPage = async () => {
     refreshCardsButton.addEventListener("click", async () => {
       const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
       encryptedCardsContainer.innerHTML = "<p>Refreshing cards...</p>"
-      await fetchAllEncryptedCards()
+      await fetchAllEncryptedCards(true)
     })
   }   
   
@@ -202,7 +202,7 @@ const processCards = async (validEncryptedCards) => {
 
 
 //Main function to load the Minter Cards ----------------------------------------
-const fetchAllEncryptedCards = async () => {
+const fetchAllEncryptedCards = async (isRefresh=false) => {
   const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
   encryptedCardsContainer.innerHTML = "<p>Loading cards...</p>"
 
@@ -243,8 +243,8 @@ const fetchAllEncryptedCards = async () => {
     // Fetch and update each card
     finalCards.forEach(async card => {
       try {
-        const hasMinterName = await extractEncryptedCardsMinterName(card.identifier)
-        if (hasMinterName) existingCardMinterNames.push(hasMinterName)
+        // const hasMinterName = await extractEncryptedCardsMinterName(card.identifier)
+        // if (hasMinterName) existingCardMinterNames.push(hasMinterName)
 
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
@@ -268,29 +268,54 @@ const fetchAllEncryptedCards = async () => {
           removeSkeleton(card.identifier)
           return
         }
-
+        
         const encryptedCardPollPublisherPublicKey = await getPollPublisherPublicKey(decryptedCardData.poll)
         const encryptedCardPublisherPublicKey = await getPublicKeyByName(card.name)
 
         if (encryptedCardPollPublisherPublicKey != encryptedCardPublisherPublicKey) {
           console.warn(`QuickMythril cardPollHijack attack found! Not including card with identifier: ${card.identifier}`)
-          return
-        }
-
-        // Fetch poll results
-        const pollResults = await fetchPollResults(decryptedCardData.poll)
-
-        if (pollResults?.error) {
-          console.warn(`Skipping card with non-existent poll: ${card.identifier}, poll=${decryptedCardData.poll}`)
           removeSkeleton(card.identifier)
           return
         }
+
+        // Fetch poll results and discard cards with no results
+        const pollResults = await fetchPollResults(decryptedCardData.poll)
+
+        if (pollResults?.error) {
+          console.warn(`Skipping card with failed poll results?: ${card.identifier}, poll=${decryptedCardData.poll}`)
+          removeSkeleton(card.identifier)
+          return
+        }
+
+        if (!isRefresh) {
+          console.log(`This is a REFRESH, NOT adding names to duplicates list...`)
+          const obtainedMinterName = decryptedCardData.minterName
+
+          // if ((obtainedMinterName) && existingCardMinterNames.includes(obtainedMinterName)) {
+          //   console.warn(`name found in existing names array...${obtainedMinterName} skipping duplicate card...${card.identifier}`)
+          //   removeSkeleton(card.identifier)
+          //   return
+          // } else if ((obtainedMinterName) && (!existingCardMinterNames.includes(obtainedMinterName))) {
+          //   existingCardMinterNames.push(obtainedMinterName)
+          //   console.log(`minterName: ${obtainedMinterName} found, doesn't exist in existing array, added to existingCardMinterNames array`)
+          // } 
+
+          if (obtainedMinterName && existingCardMinterNames.some(item => item.minterName === obtainedMinterName)) {
+            console.warn(`name found in existing names array...${obtainedMinterName} skipping duplicate card...${card.identifier}`)
+            removeSkeleton(card.identifier)
+            return
+          } else if (obtainedMinterName) {
+            existingCardMinterNames.push({ minterName: obtainedMinterName, identifier: card.identifier })
+            console.log(`Added minterName and identifier to existingCardMinterNames array:`, { minterName: obtainedMinterName, identifier: card.identifier })
+          }
+        }
+        
         // const minterNameFromIdentifier = await extractCardsMinterName(card.identifier);
         const encryptedCommentCount = await getEncryptedCommentCount(card.identifier)
         // Generate final card HTML
         
         const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, encryptedCommentCount)
-        replaceEncryptedSkeleton(card.identifier, finalCardHTML)
+        replaceSkeleton(card.identifier, finalCardHTML)
       } catch (error) {
         console.error(`Error processing card ${card.identifier}:`, error)
         removeSkeleton(card.identifier)
@@ -303,20 +328,20 @@ const fetchAllEncryptedCards = async () => {
   }
 }
 
+//TODO verify that this actually isn't necessary. if not, remove it.
+// const removeEncryptedSkeleton = (cardIdentifier) => {
+//   const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
+//   if (encryptedSkeletonCard) {
+//     encryptedSkeletonCard.remove(); // Remove the skeleton silently
+//   }
+// }
 
-const removeEncryptedSkeleton = (cardIdentifier) => {
-  const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
-  if (encryptedSkeletonCard) {
-    encryptedSkeletonCard.remove(); // Remove the skeleton silently
-  }
-}
-
-const replaceEncryptedSkeleton = (cardIdentifier, htmlContent) => {
-  const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
-  if (encryptedSkeletonCard) {
-    encryptedSkeletonCard.outerHTML = htmlContent;
-  }
-}
+// const replaceEncryptedSkeleton = (cardIdentifier, htmlContent) => {
+//   const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
+//   if (encryptedSkeletonCard) {
+//     encryptedSkeletonCard.outerHTML = htmlContent;
+//   }
+// }
 
 // Function to create a skeleton card
 const createEncryptedSkeletonCardHTML = (cardIdentifier) => {
@@ -338,52 +363,22 @@ const createEncryptedSkeletonCardHTML = (cardIdentifier) => {
 
 
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
-const fetchExistingEncryptedCard = async (minterName) => {
-  try {
-    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, minterName, 0)
+const fetchExistingEncryptedCard = async (minterName, existingIdentifier) => {
+  
+  try{
+    const cardDataResponse = await qortalRequest({
+      action: "FETCH_QDN_RESOURCE",
+      name: minterName, 
+      service: "MAIL_PRIVATE",
+      identifier: existingIdentifier,
+      encoding: "base64"
+    })
 
-    console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`)
+    const decryptedCardData = await decryptAndParseObject(cardDataResponse)
+    console.log("Full card data fetched successfully:", decryptedCardData)
 
-    // Step 2: Check if the response is an array and not empty
-    if (!response || !Array.isArray(response) || response.length === 0) {
-      console.log("No cards found for the current user.")
-      return null
-    }
-
-    // Step 3: Validate cards asynchronously
-    const validatedCards = await Promise.all(
-      response.map(async card => {
-        const isValid = await validateEncryptedCardIdentifier(card)
-        return isValid ? card : null
-      })
-    )
-
-    // Step 4: Filter out invalid cards
-    const validCards = validatedCards.filter(card => card !== null)
-
-    if (validCards.length > 0) {
-      // Step 5: Sort by most recent timestamp
-      const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0]
-
-      // Step 6: Fetch full card data
-      const cardDataResponse = await qortalRequest({
-        action: "FETCH_QDN_RESOURCE",
-        name: mostRecentCard.name, 
-        service: mostRecentCard.service,
-        identifier: mostRecentCard.identifier,
-        encoding: "base64"
-      })
-
-      existingEncryptedCardIdentifier = mostRecentCard.identifier
-
-      existingDecryptedCardData = await decryptAndParseObject(cardDataResponse)
-      console.log("Full card data fetched successfully:", existingDecryptedCardData)
-
-      return existingDecryptedCardData
-    }
-
-    console.log("No valid cards found.")
-    return null
+    return decryptedCardData
+    
   } catch (error) {
     console.error("Error fetching existing card:", error);
     return null
@@ -402,16 +397,16 @@ const validateEncryptedCardIdentifier = async (card) => {
 }
 
 // Load existing card data passed, into the form for editing -------------------------------------
-const loadEncryptedCardIntoForm = async () => {
-  if (existingDecryptedCardData) {
-    console.log("Loading existing card data:", existingDecryptedCardData);
-    document.getElementById("minter-name-input").value = existingDecryptedCardData.minterName
-    document.getElementById("card-header").value = existingDecryptedCardData.header
-    document.getElementById("card-content").value = existingDecryptedCardData.content
+const loadEncryptedCardIntoForm = async (decryptedCardData) => {
+  if (decryptedCardData) {
+    console.log("Loading existing card data:", decryptedCardData);
+    document.getElementById("minter-name-input").value = decryptedCardData.minterName
+    document.getElementById("card-header").value = decryptedCardData.header
+    document.getElementById("card-content").value = decryptedCardData.content
 
     const linksContainer = document.getElementById("links-container")
     linksContainer.innerHTML = ""; // Clear previous links
-    existingDecryptedCardData.links.forEach(link => {
+    decryptedCardData.links.forEach(link => {
       const linkInput = document.createElement("input")
       linkInput.type = "text"
       linkInput.className = "card-link"
@@ -454,19 +449,18 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
   if (!isTopic) {
     publishedMinterName = await validateMinterName(minterNameInput)
     if (!publishedMinterName) {
-      alert(`"${minterNameInput}" doesn't seem to be a valid Minter name. Please check or use topic mode.`)
+      alert(`"${minterNameInput}" doesn't seem to be a valid name. Please check or use topic mode.`)
       return
     }
     // Also check for existing card if not topic
-    if (!isExistingEncryptedCard && existingCardMinterNames.includes(publishedMinterName)) {
+    if (!isUpdateCard && existingCardMinterNames.some(item => item.minterName === publishedMinterName)) {
+      const duplicateCardData = existingCardMinterNames.find(item => item.minterName === publishedMinterName)
       const updateCard = confirm(
-        `Minter Name: ${publishedMinterName} already has a card. Update or Cancel?`
+        `Minter Name: ${publishedMinterName} already has a card. Duplicate name-based cards are not allowed. You can OVERWRITE it or Cancel publishing. UPDATE CARD?`
       )
       if (updateCard) {
-        await fetchExistingEncryptedCard(publishedMinterName)
-        await loadEncryptedCardIntoForm()
-        isExistingEncryptedCard = true
-        return
+        existingEncryptedCardIdentifier = duplicateCardData.identifier
+        isUpdateCard = true
       } else {
         return
       }
@@ -476,9 +470,9 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
   // Determine final card identifier
   const newCardIdentifier = isTopic
     ? `${encryptedCardIdentifierPrefix}-TOPIC-${await uid()}`
-    : `${encryptedCardIdentifierPrefix}-${publishedMinterName}-${await uid()}`
+    : `${encryptedCardIdentifierPrefix}-NC-${Date.now}-${await uid()}`
 
-  const cardIdentifier = isExistingEncryptedCard ? existingEncryptedCardIdentifier : newCardIdentifier
+  const cardIdentifier = isUpdateCard ? existingEncryptedCardIdentifier : newCardIdentifier
 
   // Build cardData
   const pollName = `${cardIdentifier}-poll`
@@ -527,7 +521,7 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
     })
 
     // Possibly create a poll if it’s a brand new card
-    if (!isExistingEncryptedCard) {
+    if (!isUpdateCard) {
       await qortalRequest({
         action: "CREATE_POLL",
         pollName,
@@ -536,13 +530,6 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
         pollOwnerAddress: userState.accountAddress
       })
       alert("Card and poll published successfully!")
-      
-      // If it’s a real Minter name, store it so we know we have a card for them
-      if (!isTopic) {
-        if (!existingCardMinterNames.contains(publishedMinterName)) {
-          existingCardMinterNames.push(publishedMinterName)
-        }
-      }
 
     } else {
       alert("Card updated successfully! (No poll updates possible currently...)");
@@ -749,21 +736,6 @@ const getMinterAvatar = async (minterName) => {
   }
 }
 
-// const togglePollDetails = (cardIdentifier) => {  
-//   const detailsDiv = document.getElementById(`poll-details-${cardIdentifier}`)
-//   const modal = document.getElementById(`poll-details-modal`)
-//   const modalContent = document.getElementById(`poll-details-modalContent`)
-  
-//   if (!detailsDiv || !modal || !modalContent) return
-
-//   modalContent.appendChild(detailsDiv)
-//   modal.style.display = 'block'
-//   window.onclick = (event) => {
-//     if (event.target === modal) {
-//       modal.style.display = 'none'
-//     }
-//   }
-// }
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {

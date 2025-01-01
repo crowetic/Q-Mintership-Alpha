@@ -211,7 +211,7 @@ const loadForumPage = async () => {
   const isAdmin = userState.isAdmin;
   
   // Create the forum layout, including a header, sub-menu, and keeping the original background image: style="background-image: url('/assets/images/background.jpg');">
-  const mainContent = document.createElement('div');
+  const mainContent = document.createElement('div')
   mainContent.innerHTML = `
     <div class="forum-main mbr-parallax-background cid-ttRnlSkg2R">
       <div class="forum-header" style="color: lightblue; display: flex; justify-content: center; align-items: center; padding: 10px;">
@@ -236,18 +236,18 @@ const loadForumPage = async () => {
   // Add event listeners to room buttons
   document.getElementById("minters-room").addEventListener("click", () => {
     currentPage = 0;
-    loadRoomContent("minters");
-  });
+    loadRoomContent("minters")
+  })
   if (userState.isAdmin) {
     document.getElementById("admins-room").addEventListener("click", () => {
       currentPage = 0;
-      loadRoomContent("admins");
-    });
+      loadRoomContent("admins")
+    })
   }
   document.getElementById("general-room").addEventListener("click", () => {
     currentPage = 0;
-    loadRoomContent("general");
-  });
+    loadRoomContent("general")
+  })
 }
 
 // Function to add the pagination buttons and related control mechanisms ------------------------
@@ -363,25 +363,56 @@ const loadRoomContent = async (room) => {
   ;
 };
 
-// Initialize Quill editor
+// Initialize Quill editor //TODO check the updated editor init code
+// const initializeQuillEditor = () => {
+//   new Quill('#editor', {
+//     theme: 'snow',
+//     modules: {
+//       toolbar: [
+//         [{ 'font': [] }],
+//         [{ 'size': ['small', false, 'large', 'huge'] }],
+//         [{ 'header': [1, 2, false] }],
+//         ['bold', 'italic', 'underline'],
+//         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+//         ['link', 'blockquote', 'code-block'],
+//         [{ 'color': [] }, { 'background': [] }],
+//         [{ 'align': [] }],
+//         ['clean']
+//       ]
+//     }
+//   });
+// };
+
+
 const initializeQuillEditor = () => {
-  new Quill('#editor', {
+  const editorContainer = document.querySelector('#editor');
+  
+  if (!editorContainer) {
+    console.error("Editor container not found!");
+    return;
+  }
+
+new Quill('#editor', {
     theme: 'snow',
     modules: {
       toolbar: [
         [{ 'font': [] }],
-        [{ 'size': ['small', false, 'large', 'huge'] }],
-        [{ 'header': [1, 2, false] }],
-        ['bold', 'italic', 'underline'],
+        [{ indent: '-1' }, { indent: '+1' }], 
+        [{ 'header': [1, 2, 3, 5, false] }],
+        ['bold', 'italic', 'underline', 'strike'], 
+        ['blockquote', 'code-block'], 
         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
         ['link', 'blockquote', 'code-block'],
         [{ 'color': [] }, { 'background': [] }],
+        // ['link', 'image', 'video'], //todo attempt to add fancy base64 embed function for images, gif, and maybe small videos.
         [{ 'align': [] }],
         ['clean']
       ]
     }
   });
-};
+}
+
+
 
 // Set up modal behavior
 const setupModalHandlers = () => {
@@ -469,7 +500,7 @@ const setupFileInputs = (room) => {
   })
 
   sendButton.addEventListener('click', async () => {
-    const quill = new Quill('#editor')
+    const quill = new Quill('#editor')  //TODO figure out what is going on with the quill initialization and so forth.
     const messageHtml = quill.root.innerHTML.trim()
 
     if (messageHtml || selectedFiles.length > 0 || selectedImages.length > 0) {
@@ -591,27 +622,27 @@ const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImage
 
 
 function clearInputs() {
-  const quill = new Quill('#editor');
+  // Clear the file input elements and preview container
+  document.getElementById('file-input').value = ''
+  document.getElementById('image-input').value = ''
+  document.getElementById('preview-container').innerHTML = ''
 
-  // Properly reset Quill editor to ensure formatting options don't linger across messages
-  quill.setContents([]);
-  quill.setSelection(0,0);
+  // Reset the Quill editor
+  const quill = new Quill('editor')
+    quill.setContents([]) 
+    quill.setSelection(0) 
 
-  // clear the local file input arrays
-  document.getElementById('file-input').value = "";
-  document.getElementById('image-input').value = "";
-  document.getElementById('preview-container').innerHTML = "";
-  
-  replyToMessageIdentifier = null;
-  multiResource = [];
-  attachmentIdentifiers = [];
-  selectedImages = [];
-  selectedFiles = [];
+  // Reset other state variables
+  replyToMessageIdentifier = null
+  multiResource = []
+  attachmentIdentifiers = []
+  selectedImages = []
+  selectedFiles = []
 
-  // Remove the reply containers
-  const replyContainer = document.querySelector(".reply-container");
+  // Remove the reply container
+  const replyContainer = document.querySelector('.reply-container')
   if (replyContainer) {
-    replyContainer.remove();
+    replyContainer.remove()
   }
 }
 
