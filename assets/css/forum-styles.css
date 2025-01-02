@@ -1042,7 +1042,7 @@ body {
 
 .comments-container {
   margin-bottom: 10px;
-  max-height: 300px;
+  max-height: 600px;
   overflow-y: auto;
 }
 
