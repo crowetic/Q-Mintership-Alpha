@@ -575,6 +575,7 @@ const validateMinterName = async(minterName) => {
     return name
   } catch (error){
       console.error(`extracting name from name info: ${minterName} failed.`, error)
+      return null
   }
 }
 
@@ -771,39 +772,6 @@ const fetchEncryptedComments = async (cardIdentifier) => {
   }
 }
 
-// display the comments on the card, with passed cardIdentifier to identify the card --------------
-// const displayEncryptedComments = async (cardIdentifier) => {
-//   try {
-//     const comments = await fetchEncryptedComments(cardIdentifier)
-//     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
-    
-//     for (const comment of comments) {
-//       const commentDataResponse = await qortalRequest({
-//         action: "FETCH_QDN_RESOURCE",
-//         name: comment.name,
-//         service: "MAIL_PRIVATE",
-//         identifier: comment.identifier,
-//         encoding: "base64"
-//       })
-
-//       const decryptedCommentData = await decryptAndParseObject(commentDataResponse)
-//       const timestampCheck = comment.updated || comment.created || 0
-//       const timestamp = await timestampToHumanReadableDate(timestampCheck)
-//       //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
-//       const commentHTML = `
-//         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
-//           <p><strong><u>${decryptedCommentData.creator}</strong>:</p></u>
-//           <p>${decryptedCommentData.content}</p>
-//           <p><i>${timestamp}</p></i>
-//         </div>
-//       `
-//       commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
-//     }
-//   } catch (error) {
-//     console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
-//   }
-// }
-//TODO testing this update to the comments fetching to improve performance by leveraging promise.all
 const displayEncryptedComments = async (cardIdentifier) => {
   try {
     const comments = await fetchEncryptedComments(cardIdentifier)
@@ -943,23 +911,129 @@ const processQortalLinkForRendering = async (link) => {
   return link
 }
 
-const getMinterAvatar = async (minterName) => {
-  const avatarUrl = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`
-  try {
-    const response = await fetch(avatarUrl, { method: 'HEAD' })
+const checkAndDisplayRemoveActions = async (adminYes, creator, cardIdentifier) => {
+  const latestBlockInfo = await getLatestBlockInfo()
+  const isBlockPassed = latestBlockInfo.height >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT 
+  let minAdminCount = 9
+  const minterAdmins = await fetchMinterGroupAdmins()
 
-    if (response.ok) {
-      return `<img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">`
+  if ((minterAdmins) && (minterAdmins.length === 1)){
+    console.warn(`simply a double-check that there is only one MINTER group admin, in which case the group hasn't been transferred to null...keeping default minAdminCount of: ${minAdminCount}`)
+
+  } else if ((minterAdmins) && (minterAdmins.length > 1) && isBlockPassed){
+    const totalAdmins = minterAdmins.length
+    const fortyPercent = totalAdmins * 0.40
+    minAdminCount = Math.round(fortyPercent)
+    console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
+  }
+  //TODO verify the above functionality to calculate 40% of MINTER group admins, and use that for minAdminCount
+  
+  if (adminYes >= minAdminCount && userState.isMinterAdmin && !isBlockPassed) {
+    const removeButtonHtml = createRemoveButtonHtml(creator, cardIdentifier)
+    return removeButtonHtml
+  }
+  return ''
+}
+
+const createRemoveButtonHtml = (name, cardIdentifier) => {
+  return `
+    <div id="remove-button-container-${cardIdentifier}" style="margin-top: 1em;">
+      <button onclick="handleKickMinter('${name}')"
+              style="padding: 10px; background: rgb(134, 80, 4); color: white; border: none; cursor: pointer; border-radius: 5px;"
+              onmouseover="this.style.backgroundColor='rgb(47, 28, 11) '"
+                  onmouseout="this.style.backgroundColor='rgb(134, 80, 4) '">
+        KICK Minter
+      </button>
+      <button onclick="handleBanMinter('${name}')"
+              style="padding: 10px; background:rgb(93, 7, 7); color: white; border: none; cursor: pointer; border-radius: 5px;"
+              onmouseover="this.style.backgroundColor='rgb(39, 9, 9) '"
+                  onmouseout="this.style.backgroundColor='rgb(93, 7, 7) '">
+        BAN Minter
+      </button>
+    </div>
+  `
+}
+
+const handleKickMinter = async (minterName) => {
+  try {
+    // Optional block check
+    const { height: currentHeight } = await getLatestBlockInfo()
+    if (currentHeight <= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT) {
+      console.log(`block height is under the removal featureTrigger height`)
+    }
+
+    // Get the minter address from name info
+    const minterInfo = await getNameInfo(minterName)
+    const minterAddress = minterInfo?.owner
+    if (!minterAddress) {
+      alert(`No valid address found for minter name: ${minterName}`)
+      return
+    }
+
+    // The admin public key
+    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+
+    // Create the raw remove transaction
+    const rawKickTransaction = await createGroupKickTransaction(minterAddress, adminPublicKey, 694, minterAddress)
+
+    // Sign the transaction
+    const signedKickTransaction = await qortalRequest({
+      action: "SIGN_TRANSACTION",
+      unsignedBytes: rawKickTransaction
+    })
+
+    // Process the transaction
+    const processResponse = await processTransaction(signedKickTransaction)
+
+    if (processResponse?.status === "OK") {
+      alert(`${minterName}'s KICK transaction has been SUCCESSFULLY PROCESSED. Please WAIT FOR CONFIRMATION...`)
     } else {
-      return ''
+      alert("Failed to process the removal transaction.")
     }
 
   } catch (error) {
-    console.error('Error checking avatar availability:', error)
-    return ''
+    console.error("Error removing minter:", error)
+    alert("Error removing minter. Please try again.")
   }
 }
 
+const handleBanMinter = async (minterName) => {
+  try {
+    
+    const { height: currentHeight } = await getLatestBlockInfo()
+    if (currentHeight <= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT) {
+      console.log(`block height is under the removal featureTrigger height`)
+    }
+
+    const minterInfo = await getNameInfo(minterName)
+    const minterAddress = minterInfo?.owner
+    if (!minterAddress) {
+      alert(`No valid address found for minter name: ${minterName}`)
+      return
+    }
+
+    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+
+    const rawBanTransaction = await createGroupBanTransaction(minterAddress, adminPublicKey, 694, minterAddress)
+
+    const signedBanTransaction = await qortalRequest({
+      action: "SIGN_TRANSACTION",
+      unsignedBytes: rawBanTransaction
+    })
+
+    const processResponse = await processTransaction(signedBanTransaction)
+
+    if (processResponse?.status === "OK") {
+      alert(`${minterName}'s BAN transaction has been SUCCESSFULLY PROCESSED. Please WAIT FOR CONFIRMATION...`)
+    } else {
+      alert("Failed to process the removal transaction.")
+    }
+
+  } catch (error) {
+    console.error("Error removing minter:", error)
+    alert("Error removing minter. Please try again.")
+  }
+}
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
@@ -1001,8 +1075,21 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
   const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
+
   createModal('links')
   createModal('poll-details')
+
+  let showRemoveHtml
+  const verifiedName = await validateMinterName(minterName)
+  if (verifiedName) {
+    console.log(`name is validated, utilizing for removal features...${verifiedName}`)
+    const removeActionsHtml = await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
+    showRemoveHtml = removeActionsHtml
+  } else {
+    console.log(`name could not be validated, assuming topic card (or some other issue with name validation) for removalActions`)
+    showRemoveHtml = ''
+  }
+
   return `
   <div class="admin-card" style="background-color: ${cardColorCode}">
     <div class="minter-card-header">
@@ -1025,6 +1112,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       <div id="poll-details-${cardIdentifier}" style="display: none;">
         ${detailsHtml}
       </div>
+      ${showRemoveHtml}
       <div class="admin-results">
         <span class="admin-yes">Admin Support: ${adminYes}</span>
         <span class="admin-no">Admin Against: ${adminNo}</span>

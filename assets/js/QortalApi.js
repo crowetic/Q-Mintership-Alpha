@@ -1202,7 +1202,7 @@ const processTransaction = async (rawTransaction) => {
 
 // Create a group invite transaction. This will utilize a default timeToLive (which is how long the tx will be alive, not the time until it IS live...) of 10 days in seconds, as the legacy UI has a bug that doesn't display invites older than 10 days.
 // We will also default to the MINTER group for groupId, AFTER the GROUP_APPROVAL changes, the txGroupId will need to be set for tx that require approval.
-const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive = 864000, txGroupId = 0) => {
+const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive = 864000, txGroupId = 0, fee=0.01) => {
 
     try {
         // Fetch account reference correctly
@@ -1217,7 +1217,7 @@ const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, gr
         const payload = {
             timestamp: Date.now(), 
             reference: accountReference, 
-            fee: 0.01,
+            fee: fee || 0.01,
             txGroupId: txGroupId, 
             recipient: recipientAddress, 
             adminPublicKey: adminPublicKey, 
@@ -1251,6 +1251,103 @@ const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, gr
     }
 }
 
+const createGroupKickTransaction = async (recipientAddress, adminPublicKey, groupId=694, member, reason='Kicked by admins', txGroupId = 0, fee=0.01) => {
+
+    try {
+        // Fetch account reference correctly
+        const accountInfo = await getAddressInfo(recipientAddress)
+        const accountReference = accountInfo.reference
+
+        // Validate inputs before making the request
+        if (!adminPublicKey || !accountReference || !recipientAddress) {
+            throw new Error("Missing required parameters for group invite transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference: accountReference, 
+            fee: fee | 0.01,
+            txGroupId: txGroupId, 
+            recipient: recipientAddress, 
+            adminPublicKey: adminPublicKey, 
+            groupId: groupId, 
+            member: member || recipientAddress, 
+            reason: reason
+        }
+
+        console.log("Sending group invite transaction payload:", payload)
+
+        const response = await fetch(`${baseUrl}/groups/kick`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+    } catch (error) {
+        console.error("Error creating group invite transaction:", error)
+        throw error
+    }
+}
+
+const createGroupBanTransaction = async (recipientAddress, adminPublicKey, groupId=694, offender, reason='Banned by admins', txGroupId = 0, fee=0.01) => {
+
+    try {
+        // Fetch account reference correctly
+        const accountInfo = await getAddressInfo(recipientAddress)
+        const accountReference = accountInfo.reference
+
+        // Validate inputs before making the request
+        if (!adminPublicKey || !accountReference || !recipientAddress) {
+            throw new Error("Missing required parameters for group invite transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference: accountReference, 
+            fee: fee | 0.01,
+            txGroupId: txGroupId, 
+            recipient: recipientAddress, 
+            adminPublicKey: adminPublicKey, 
+            groupId: groupId, 
+            offender: offender || recipientAddress, 
+            reason: reason
+        }
+
+        console.log("Sending group invite transaction payload:", payload)
+
+        const response = await fetch(`${baseUrl}/groups/kick`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+    } catch (error) {
+        console.error("Error creating group invite transaction:", error)
+        throw error
+    }
+}
 
 const getLatestBlockInfo = async () => {
     try {

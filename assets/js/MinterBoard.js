@@ -5,7 +5,7 @@ let isExistingCard = false
 let existingCardData = {}
 let existingCardIdentifier = {}
 const MIN_ADMIN_YES_VOTES = 9;
-const MINTER_INVITE_BLOCK_HEIGHT = 9999999; // Example height, update later
+const GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT = 99999999 //TODO update this to correct featureTrigger height when known, either that, or pull from core.
 let isApproved = false
 
 const loadMinterBoardPage = async () => {
@@ -999,7 +999,7 @@ const generateDarkPastelBackgroundBy = (name) => {
 const handleInviteMinter = async (minterName) => {
   try {
     const blockInfo = await getLatestBlockInfo()
-    const blockHeight = toString(blockInfo.height)
+    const blockHeight = blockInfo.height
     if (blockHeight <= MINTER_INVITE_BLOCK_HEIGHT) {
       console.log(`block height is under the featureTrigger height`)
     }
@@ -1020,7 +1020,7 @@ const handleInviteMinter = async (minterName) => {
     const processResponse = await processTransaction(signedTransaction)
 
     if (processResponse?.status === "OK") {
-        alert(`${minterName} has been successfully invited!`)
+        alert(`${minterName} has been successfully invited, please WAIT FOR CONFIRMATION...`)
     } else {
         alert("Failed to process the invite transaction.")
     }
@@ -1046,15 +1046,32 @@ const createInviteButtonHtml = (creator, cardIdentifier) => {
 
 const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
   const latestBlockInfo = await getLatestBlockInfo()
-  const isBlockPassed = latestBlockInfo.height > MINTER_INVITE_BLOCK_HEIGHT
+  const isBlockPassed = latestBlockInfo.height >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT
 
-  if (adminYes >= 9 && userState.isMinterAdmin) {
+  if (adminYes >= 9 && userState.isMinterAdmin && !isBlockPassed) {
       const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
       console.log(`admin votes over 9, creating invite button...`, adminYes)
     return inviteButtonHtml
   }
 
   return null
+}
+
+const getMinterAvatar = async (minterName) => {
+  const avatarUrl = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`
+  try {
+    const response = await fetch(avatarUrl, { method: 'HEAD' })
+
+    if (response.ok) {
+      return `<img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">`
+    } else {
+      return ''
+    }
+
+  } catch (error) {
+    console.error('Error checking avatar availability:', error)
+    return ''
+  }
 }
 
 
