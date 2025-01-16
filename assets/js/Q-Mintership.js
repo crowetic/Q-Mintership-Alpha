@@ -99,7 +99,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   })
 
   // --- ADMIN CHECK ---
-  await verifyUserIsAdmin();
+  await verifyUserIsAdmin()
 
   if (userState.isAdmin && (localStorage.getItem('savedAdminData'))) {
     console.log('saved admin data found (Q-Mintership.js), loading...')

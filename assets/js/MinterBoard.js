@@ -9,6 +9,7 @@ const GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT = 9999950 //TODO update this to corr
 let featureTriggerPassed = false
 let isApproved = false
 
+
 const loadMinterBoardPage = async () => {
   // Clear existing content on the page
   const bodyChildren = document.body.children

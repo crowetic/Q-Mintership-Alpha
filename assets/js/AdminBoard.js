@@ -12,12 +12,54 @@ let adminMemberCount = 0
 let adminPublicKeys = []
 let kickTransactions = []
 let banTransactions = []
+let adminBoardState = {
+  kickedCards: new Set(),  // store identifiers or addresses
+  bannedCards: new Set(),  // likewise
+  hiddenList: new Set(),   // user-hidden
+  // ... we can add other things to state if needed...
+}
+
+const loadAdminBoardState = () => {
+  // Load from localStorage if available
+  const rawState = localStorage.getItem('adminBoardState')
+  if (rawState) {
+    try {
+      const parsed = JSON.parse(rawState);
+      // Make sure bannedCards and kickedCards are sets
+      return {
+        bannedCards: new Set(parsed.bannedCards ?? []),
+        kickedCards: new Set(parsed.kickedCards ?? []),
+        hiddenList: new Set(parsed.hiddenList ?? []),
+        // ... any other fields
+      };
+    } catch (e) {
+      console.warn("Failed to parse adminBoardState from storage:", e)
+    }
+  }
+  // If nothing found or parse error, return a default
+  return {
+    bannedCards: new Set(),
+    kickedCards: new Set(),
+    hiddenList: new Set(),
+  }
+}
+
+// Saving the state back into localStorage as needed:
+const saveAdminBoardState = () => {
+  const stateToSave = {
+    bannedCards: Array.from(adminBoardState.bannedCards),
+    kickedCards: Array.from(adminBoardState.kickedCards),
+    hiddenList: Array.from(adminBoardState.hiddenList),
+  }
+  localStorage.setItem('adminBoardState', JSON.stringify(stateToSave))
+}
 
 console.log("Attempting to load AdminBoard.js")
 
 const loadAdminBoardPage = async () => {
   // Clear existing content on the page
-  const bodyChildren = document.body.children;
+  const bodyChildren = document.body.children
+
   for (let i = bodyChildren.length - 1; i >= 0; i--) {
       const child = bodyChildren[i];
       if (!child.classList.contains("menu")) {
@@ -34,6 +76,12 @@ const loadAdminBoardPage = async () => {
     <p> More functionality will be added over time. One of the first features will be the ability to output the existing card data 'decisions', to a json formatted list in order to allow crowetic to run his script easily until the final Mintership proposal changes are completed, and the MINTER group is transferred to 'null'.</p>
     <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Encrypted Card</button>
     <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
+    <div class="show-card-checkbox" style="margin-top: 1em;">
+      <input type="checkbox" id="admin-show-hidden-checkbox" name="adminHidden" />
+      <label for="admin-show-hidden-checkbox">Show User-Hidden Cards?</label>
+      <input type="checkbox" id="admin-show-kicked-banned-checkbox" name="kickedBanned" />
+      <label for="admin-show-kicked-banned-checkbox">Show Kicked / Banned Cards?</label>
+    </div>
     <div id="encrypted-cards-container" class="cards-container" style="margin-top: 20px;"></div>
     <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
         <form id="publish-card-form">
@@ -61,6 +109,7 @@ const loadAdminBoardPage = async () => {
   `
   document.body.appendChild(mainContent)
   const publishCardButton = document.getElementById("publish-card-button")
+
   if (publishCardButton) {
     publishCardButton.addEventListener("click", async () => {
       const publishCardView = document.getElementById("publish-card-view")
@@ -69,6 +118,7 @@ const loadAdminBoardPage = async () => {
     })
   }
   const refreshCardsButton = document.getElementById("refresh-cards-button")
+
   if (refreshCardsButton) {
     refreshCardsButton.addEventListener("click", async () => {
       const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
@@ -76,8 +126,8 @@ const loadAdminBoardPage = async () => {
       await fetchAllEncryptedCards(true)
     })
   }   
-  
   const cancelPublishButton = document.getElementById("cancel-publish-button")
+
   if (cancelPublishButton) {
     cancelPublishButton.addEventListener("click", async () => {
       const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
@@ -87,6 +137,7 @@ const loadAdminBoardPage = async () => {
     })
   }
   const addLinkButton = document.getElementById("add-link-button")
+
   if (addLinkButton) {
     addLinkButton.addEventListener("click", async () => {
       const linksContainer = document.getElementById("links-container")
@@ -98,12 +149,21 @@ const loadAdminBoardPage = async () => {
     })
   }
 
+  document.getElementById('show-kicked-banned-checkbox')?.addEventListener('change', () => {
+    fetchAllEncryptedCards()
+  })
+
+  document.getElementById('show-admin-hidden-checkbox')?.addEventListener('change', () => {
+    fetchAllEncryptedCards()
+  })
+  
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
     event.preventDefault()
     const isTopicChecked = document.getElementById("topic-checkbox").checked
     // Pass that boolean to publishEncryptedCard
     await publishEncryptedCard(isTopicChecked)
   })
+
   createScrollToTopButton()
   // await fetchAndValidateAllAdminCards()
   await updateOrSaveAdminGroupsDataLocally()
@@ -112,26 +172,12 @@ const loadAdminBoardPage = async () => {
 }
 
 const fetchAllKicKBanTxData = async () => {
-  const kickTxType = "GROUP_KICK"
-  const banTxType = "GROUP_BAN"
-  const banArray = [banTxType]
-  const kickArray = [kickTxType]
+  const kickTxType = "GROUP_KICK";
+  const banTxType = "GROUP_BAN";
 
-  banTransactions = await searchTransactions({
-    txTypes: banArray,
-    address: '',                // or whatever address
-    confirmationStatus: 'CONFIRMED',
-    limit: 0,
-    reverse: true,
-    offset: 0,
-    startBlock: 1990000,
-    blockLimit: 0,
-    txGroupId: 0
-  });
-  console.warn(`banTxData`, banTransactions)
-
-  kickTransactions = await searchTransactions({
-    txTypes: kickArray,
+  // 1) Fetch ban transactions
+  const rawBanTransactions = await searchTransactions({
+    txTypes: [banTxType],
     address: '',
     confirmationStatus: 'CONFIRMED',
     limit: 0,
@@ -139,10 +185,29 @@ const fetchAllKicKBanTxData = async () => {
     offset: 0,
     startBlock: 1990000,
     blockLimit: 0,
-    txGroupId: 0
+    txGroupId: 0,
   });
-  console.warn(`kickTxData`, kickTransactions)
-}
+  // Filter out 'PENDING'
+  banTransactions = rawBanTransactions.filter((tx) => tx.approvalStatus !== 'PENDING');
+  console.warn('banTxData (no PENDING):', banTransactions);
+
+  // 2) Fetch kick transactions
+  const rawKickTransactions = await searchTransactions({
+    txTypes: [kickTxType],
+    address: '',
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 0,
+  });
+  // Filter out 'PENDING'
+  kickTransactions = rawKickTransactions.filter((tx) => tx.approvalStatus !== 'PENDING');
+  console.warn('kickTxData (no PENDING):', kickTransactions);
+};
+
 
 
 // Example: fetch and save admin public keys and count
@@ -155,7 +220,7 @@ const updateOrSaveAdminGroupsDataLocally = async () => {
     const adminData = {
       keysCount: verifiedAdminPublicKeys.length,
       publicKeys: verifiedAdminPublicKeys
-    };
+    }
 
     adminPublicKeys = verifiedAdminPublicKeys
 
@@ -173,11 +238,12 @@ const loadOrFetchAdminGroupsData = async () => {
   try {
     // Pull the JSON from localStorage
     const storedData = localStorage.getItem('savedAdminData')
+
     if (!storedData && attemptLoadAdminDataCount <= 3) {
       console.log('No saved admin public keys found in local storage. Fetching...')
       await updateOrSaveAdminGroupsDataLocally()
       attemptLoadAdminDataCount++
-      return null;
+      return null
     }
     // Parse the JSON, then store the global variables.
     const parsedData = JSON.parse(storedData)
@@ -191,7 +257,7 @@ const loadOrFetchAdminGroupsData = async () => {
     console.log(`Loaded admins 'keysCount'=${adminMemberCount}, publicKeys=`, adminPublicKeys)
     attemptLoadAdminDataCount = 0
 
-    return parsedData; // and return { adminMemberCount, adminKeys } to the caller
+    return parsedData // and return { adminMemberCount, adminKeys } to the caller
   } catch (error) {
     console.error('Error loading/parsing saved admin public keys:', error)
     return null
@@ -199,10 +265,10 @@ const loadOrFetchAdminGroupsData = async () => {
 }
 
 const extractEncryptedCardsMinterName = (cardIdentifier) => {
-  const parts = cardIdentifier.split('-');
+  const parts = cardIdentifier.split('-')
   // Ensure the format has at least 3 parts
   if (parts.length < 3) {
-    throw new Error('Invalid identifier format');
+    throw new Error('Invalid identifier format')
   }
   
   if (parts.slice(2, -1).join('-') === 'TOPIC') {
@@ -264,7 +330,7 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
 
     if (validCardsWithData.length === 0) {
       encryptedCardsContainer.innerHTML = "<p>No valid cards found.</p>"
-      return;
+      return
     }
 
     // Combine `processCards` logic: Deduplicate cards by identifier and keep latest timestamp
@@ -317,15 +383,38 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
 
     encryptedCardsContainer.innerHTML = ""
 
+    const finalVisualFilterCards = finalCards.filter(({card}) => {
+      const showKickedBanned = document.getElementById('admin-show-kicked-banned-checkbox')?.checked ?? false
+      const showHiddenAdminCards = document.getElementById('admin-show-hidden-checkbox')?.checked ?? false
+
+      if (!showKickedBanned){
+        if (adminBoardState.bannedCards.has(card.identifier)) {
+          return false // skip
+        }
+
+        if (adminBoardState.kickedCards.has(card.identifier)) {
+          return false // skip
+        }
+      } 
+      
+      if (!showHiddenAdminCards) {
+        if (adminBoardState.hiddenList.has(card.identifier)) {
+          return false // skip
+        }
+      }
+      
+      return true
+    })
+    console.warn(`sharing current adminBoardState...`,adminBoardState)
     // Display skeleton cards immediately
-    finalCards.forEach(({ card }) => {
+    finalVisualFilterCards.forEach(({ card }) => {
       const skeletonHTML = createSkeletonCardHTML(card.identifier)
       encryptedCardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
-    })
+    }) 
 
     // Fetch poll results and update each card
     await Promise.all(
-      finalCards.map(async ({ card, decryptedCardData }) => {
+      finalVisualFilterCards.map(async ({ card, decryptedCardData }) => {
         try {
           // Validate poll publisher keys
           const encryptedCardPollPublisherPublicKey = await getPollPublisherPublicKey(decryptedCardData.poll)
@@ -355,6 +444,9 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
             card.identifier,
             encryptedCommentCount
           )
+          if ((!finalCardHTML) || (finalCardHTML === '')){
+            removeSkeleton(card.identifier)
+          }
           replaceSkeleton(card.identifier, finalCardHTML)
         } catch (error) {
           console.error(`Error finalizing card ${card.identifier}:`, error)
@@ -424,7 +516,7 @@ const validateEncryptedCardIdentifier = async (card) => {
 // Load existing card data passed, into the form for editing -------------------------------------
 const loadEncryptedCardIntoForm = async (decryptedCardData) => {
   if (decryptedCardData) {
-    console.log("Loading existing card data:", decryptedCardData);
+    console.log("Loading existing card data:", decryptedCardData)
     document.getElementById("minter-name-input").value = decryptedCardData.minterName
     document.getElementById("card-header").value = decryptedCardData.header
     document.getElementById("card-content").value = decryptedCardData.content
@@ -629,7 +721,7 @@ const postEncryptedComment = async (cardIdentifier) => {
       encrypt: true,
       publicKeys: adminPublicKeys
     })
-    alert('Comment posted successfully!')
+    // alert('Comment posted successfully!')
     commentInput.value = ''
     
   } catch (error) {
@@ -969,6 +1061,8 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       ${`Link ${index + 1} - ${link}`}
     </button>
   `).join("")
+  const showKickedBanned = document.getElementById('admin-show-kicked-banned-checkbox')?.checked ?? false
+  const showHiddenAdminCards = document.getElementById('admin-show-hidden-checkbox')?.checked ?? false
 
   const isUndefinedUser = (minterName === 'undefined')
 
@@ -1018,6 +1112,13 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       cardColorCode = 'rgb(24, 3, 3)'
       altText  = `<h4 style="color:rgb(106, 2, 2); margin-bottom: 0.5em;">BANNED From MINTER Group</h4>`
       showRemoveHtml = ''
+      if (!adminBoardState.bannedCards.has(cardIdentifier)){
+        adminBoardState.bannedCards.add(cardIdentifier)
+      }
+      if (!showKickedBanned){
+        console.warn(`kick/bank checkbox is unchecked, and card is banned, not displaying...`)
+        return ''
+      }
     }
     
     if (kickTransactions.some((kickTx) => kickTx.groupId === 694 && kickTx.member === accountAddress)){
@@ -1025,6 +1126,13 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       cardColorCode = 'rgb(29, 7, 4)'
       altText  = `<h4 style="color:rgb(143, 117, 21); margin-bottom: 0.5em;">KICKED From MINTER Group</h4>`
       showRemoveHtml = ''
+      if (!adminBoardState.kickedCards.has(cardIdentifier)){
+        adminBoardState.kickedCards.add(cardIdentifier)
+      }
+      if (!showKickedBanned) {
+        console.warn(`kick/ban checkbox is unchecked, card is kicked, not displaying...`)
+        return ''
+      }
     }
     
   } else {
