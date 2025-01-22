@@ -129,7 +129,7 @@ const loadMinterBoardPage = async () => {
 
   document.getElementById("sort-select").addEventListener("change", async () => {
     // Re-load the cards whenever user chooses a new sort option.
-    await loadCards()
+    await loadCards(minterCardIdentifierPrefix)
   })
 
   await featureTriggerCheck()
