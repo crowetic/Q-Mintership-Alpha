@@ -1286,9 +1286,9 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
     const removeActionsHtml = await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
     showRemoveHtml = removeActionsHtml
     if (userVote === 0) {
-      cardColorCode = "rgba(0, 192, 0, 0.3)"; // or any green you want
+      cardColorCode = "rgba(1, 65, 39, 0.41)"; // or any green you want
     } else if (userVote === 1) {
-      cardColorCode = "rgba(192, 0, 0, 0.3)"; // or any red you want
+      cardColorCode = "rgba(55, 12, 12, 0.61)"; // or any red you want
     }
     
     if (banTransactions.some((banTx) => banTx.groupId === 694 && banTx.offender === accountAddress)){
