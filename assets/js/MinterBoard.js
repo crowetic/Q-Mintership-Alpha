@@ -37,6 +37,13 @@ const loadMinterBoardPage = async () => {
         <option value="least-votes">Least Votes</option>
         <option value="most-votes">Most Votes</option>
       </select>
+      <select id="time-range-select" style="margin-left: 10px; padding: 5px;">
+        <option value="0">Show All</option>
+        <option value="1">Last 1 day</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
         <form id="publish-card-form">
@@ -127,6 +134,11 @@ const loadMinterBoardPage = async () => {
     await publishCard(minterCardIdentifierPrefix)
   })
 
+  document.getElementById("time-range-select").addEventListener("change", async () => {
+    // Re-load the cards whenever user chooses a new sort option.
+    await loadCards(minterCardIdentifierPrefix)
+  })
+
   document.getElementById("sort-select").addEventListener("change", async () => {
     // Re-load the cards whenever user chooses a new sort option.
     await loadCards(minterCardIdentifierPrefix)
@@ -149,11 +161,11 @@ const extractMinterCardsMinterName = async (cardIdentifier) => {
   }
   try {
     if (cardIdentifier.startsWith(minterCardIdentifierPrefix)){
-      const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1)
+      const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1, 0, '', false, true)
       const minterName = await searchSimpleResults.name
       return minterName
     } else if (cardIdentifier.startsWith(addRemoveIdentifierPrefix)) {
-      const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1)
+      const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1, 0, '', false, true)
       const publisherName = searchSimpleResults.name
       const cardDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
@@ -161,103 +173,204 @@ const extractMinterCardsMinterName = async (cardIdentifier) => {
         service: "BLOG_POST",
         identifier: cardIdentifier,
       })
+      let nameInvalid = false
       const minterName = cardDataResponse.minterName
-      return minterName
+      if (minterName){
+        return minterName
+      } else {
+        nameInvalid = true
+        console.warn(`fuckery detected on identifier: ${cardIdentifier}, hello dipshit Mythril!, name invalid? Name doesn't match publisher? Returning invalid flag + publisherName...`)
+        return publisherName
+      }
     }
   } catch (error) {
     throw error
   }
 }
 
-const processMinterCards = async (validMinterCards) => {
-  const latestCardsMap = new Map()
-
-  // Deduplicate by identifier, keeping the most recent
-  validMinterCards.forEach(card => {
-    const timestamp = card.updated || card.created || 0
-    const existingCard = latestCardsMap.get(card.identifier)
-
-    if (!existingCard || timestamp > (existingCard.updated || existingCard.created || 0)) {
-      latestCardsMap.set(card.identifier, card)
+const groupAndLabelByIdentifier = (allCards) => {
+  // Group by identifier
+  const mapById = new Map()
+  allCards.forEach(card => {
+    if (!mapById.has(card.identifier)) {
+      mapById.set(card.identifier, [])
     }
+    mapById.get(card.identifier).push(card)
   })
 
-  // Convert Map back to array
-  const uniqueValidCards = Array.from(latestCardsMap.values())
+  // For each identifier's group, sort oldest->newest so the first is "master"
+  const output = []
+  for (const [identifier, group] of mapById.entries()) {
+    group.sort((a, b) => {
+      const aTime = a.created || 0
+      const bTime = b.created || 0
+      return aTime - bTime  // oldest first
+    })
 
-  const minterGroupMembers = await fetchMinterGroupMembers()
-  const minterGroupAddresses = minterGroupMembers.map(m => m.member)
-  const minterNameMap = new Map()
+    // Mark the first as master
+    group[0].isMaster = true
+    // The rest are updates
+    for (let i = 1; i < group.length; i++) {
+      group[i].isMaster = false
+    }
 
-  // For each card, extract minterName safely
-  for (const card of uniqueValidCards) {
-    let minterName
+    // push them all to output
+    output.push(...group)
+  }
+
+  return output
+}
+
+// no semicolons, using arrow functions
+const groupByIdentifierOldestFirst = (allCards) => {
+  // map of identifier => array of cards
+  const mapById = new Map()
+
+  allCards.forEach(card => {
+    if (!mapById.has(card.identifier)) {
+      mapById.set(card.identifier, [])
+    }
+    mapById.get(card.identifier).push(card)
+  })
+
+  // sort each group oldest->newest
+  for (const [identifier, group] of mapById.entries()) {
+    group.sort((a, b) => {
+      const aTime = a.created || 0
+      const bTime = b.created || 0
+      return aTime - bTime // oldest first
+    })
+  }
+
+  return mapById
+}
+
+// no semicolons, arrow functions
+const buildMinterNameGroups = async (mapById) => {
+  // We'll build an array of objects: { minterName, cards }
+  // Then we can combine any that share the same minterName.
+
+  const nameGroups = []
+
+  for (let [identifier, group] of mapById.entries()) {
+    // group[0] is the oldest => "master" card
+    let masterCard = group[0]
+
+    // Filter out any cards that are not published by the 'masterPublisher'
+    const masterPublisherName = masterCard.name
+    // Remove any cards in this identifier group that have a different publisherName
+    const filteredGroup = group.filter(c => c.name === masterPublisherName)
+
+    // If filtering left zero cards, skip entire group
+    if (!filteredGroup.length) {
+      console.warn(`All cards removed for identifier=${identifier} (different publishers). Skipping.`)
+      continue
+    }
+    // Reassign group to the filtered version, then re-define masterCard
+    group = filteredGroup
+    masterCard = group[0] // oldest after filtering
+
+    // attempt to obtain minterName from the master card
+    let masterMinterName
     try {
-      // If this throws, we catch below and skip
-      minterName = await extractMinterCardsMinterName(card.identifier)
-    } catch (error) {
-      console.warn(
-        `Skipping card ${card.identifier} because extractMinterCardsMinterName failed:`,
-        error
-      )
-      continue // Skip this card and move on
-    }
-
-    console.log(`minterName`, minterName)
-    // Next, get minterNameInfo
-    const minterNameInfo = await getNameInfo(minterName)
-    if (!minterNameInfo) {
-      console.warn(`minterNameInfo is null for minter: ${minterName}, skipping card.`)
+      masterMinterName = await extractMinterCardsMinterName(masterCard.identifier)
+    } catch (err) {
+      console.warn(`Skipping entire group ${identifier}, no valid minterName from master`, err)
       continue
     }
 
-    const minterAddress = minterNameInfo.owner
-    // Validate the address
-    const addressValid = await getAddressInfo(minterAddress)
-    if (!minterAddress || !addressValid) {
-      console.warn(`minterAddress invalid or missing for: ${minterName}, skipping card.`, minterAddress)
-      continue
-    }
+    // Store an object with the minterName we extracted, plus all cards in that group
+    nameGroups.push({
+      minterName: masterMinterName,
+      cards: group // includes the master & updates
+    })
+  }
 
-    // If this is a 'regular' minter card, skip if user is already a minter
-    if (!card.identifier.includes('QM-AR-card')) {
-      if (minterGroupAddresses.includes(minterAddress)) {
-        console.log(
-          `existing minter found or fake name detected. Not including minter card: ${card.identifier}`
-        )
-        continue
+  // Combine them: minterName => array of *all* cards from all matching groups
+  const combinedMap = new Map()
+  for (const entry of nameGroups) {
+    const mName = entry.minterName
+    if (!combinedMap.has(mName)) {
+      combinedMap.set(mName, [])
+    }
+    combinedMap.get(mName).push(...entry.cards)
+  }
+
+  return combinedMap
+}
+
+
+const getNewestCardPerMinterName = (combinedMap) => {
+  // We'll produce an array of the newest card for each minterName, this will be utilized as the 'final filter' to display cards published/updated by unique minters.
+  const finalOutput = []
+
+  for (const [mName, cardArray] of combinedMap.entries()) {
+    // sort by updated or created, descending => newest first
+    cardArray.sort((a, b) => {
+      const aTime = a.updated || a.created || 0
+      const bTime = b.updated || b.created || 0
+      return bTime - aTime
+    })
+    // newest is [0]
+    finalOutput.push(cardArray[0])
+  }
+  // Then maybe globally sort them newest first
+  finalOutput.sort((a, b) => {
+    const aTime = a.updated || a.created || 0
+    const bTime = b.updated || b.created || 0
+    return bTime - aTime
+  })
+
+  return finalOutput
+}
+
+const processMinterBoardCards = async (allValidCards) => {
+  // group by identifier, sorted oldest->newest
+  const mapById = groupByIdentifierOldestFirst(allValidCards)
+  // build a map of minterName => all cards from those identifiers
+  const minterNameMap = await buildMinterNameGroups(mapById)
+  // from that map, keep only the single newest card per minterName
+  const newestCards = getNewestCardPerMinterName(minterNameMap)
+  // return final array of all newest cards
+  return newestCards
+}
+
+const processARBoardCards = async (allValidCards) => {
+  const mapById = groupByIdentifierOldestFirst(allValidCards)
+  // build a map of minterName => all cards from those identifiers
+  const mapByName = await buildMinterNameGroups(mapById)
+  // For each minterName group, we might want to sort them newest->oldest
+  const finalOutput = []
+  for (const [minterName, group] of mapByName.entries()) {
+    group.sort((a, b) => {
+      const aTime = a.updated || a.created || 0
+      const bTime = b.updated || b.created || 0
+      return bTime - aTime
+    })
+    // both resolution for the duplicate QuickMythril card, and handling of all future duplicates that may be published...
+    if (group[0].identifier === 'QM-AR-card-Xw3dxL') {
+      console.warn(`This is a bug that allowed a duplicate prior to the logic displaying them based on original publisher only... displaying in reverse order...`)
+      group[0].isDuplicate = true
+      for (let i = 1; i < group.length; i++) {
+        group[i].isDuplicate = false
+      } 
+    }else {
+      group[0].isDuplicate = false
+      for (let i = 1; i < group.length; i++) {
+        group[i].isDuplicate = true
       }
     }
-
-    // Keep only the most recent card for each minterName
-    const existingCard = minterNameMap.get(minterName)
-    const cardTimestamp = card.updated || card.created || 0
-    const existingTimestamp = existingCard?.updated || existingCard?.created || 0
-
-    if (!existingCard || cardTimestamp > existingTimestamp) {
-      minterNameMap.set(minterName, card)
-    }
+    // push them all
+    finalOutput.push(...group)
   }
-
-  // Convert minterNameMap to final array
-  const finalCards = []
-  const seenMinterNames = new Set()
-
-  for (const [minterName, card] of minterNameMap.entries()) {
-    if (!seenMinterNames.has(minterName)) {
-      finalCards.push(card)
-      seenMinterNames.add(minterName)
-    }
-  }
-
-  // Sort by timestamp descending
-  finalCards.sort((a, b) => {
-    const timestampA = a.updated || a.created || 0
-    const timestampB = b.updated || b.created || 0
-    return timestampB - timestampA
+  // Sort final by newest overall
+  finalOutput.sort((a, b) => {
+    const aTime = a.updated || a.created || 0
+    const bTime = b.updated || b.created || 0
+    return bTime - aTime
   })
 
-  return finalCards
+  return finalOutput
 }
 
 
@@ -266,37 +379,51 @@ const loadCards = async (cardIdentifierPrefix) => {
   const cardsContainer = document.getElementById("cards-container")
   let isARBoard = false
   cardsContainer.innerHTML = "<p>Loading cards...</p>"
-  if ((cardIdentifierPrefix.startsWith(`QM-AR-card`))) {
+
+  if (cardIdentifierPrefix.startsWith("QM-AR-card")) {
     isARBoard = true
     console.warn(`ARBoard determined:`, isARBoard)
   }
+  let afterTime = 0
+  const timeRangeSelect = document.getElementById("time-range-select")
+
+  if (timeRangeSelect) {
+    const days = parseInt(timeRangeSelect.value, 10)
+    if (days > 0) {
+      const now = Date.now()
+      const dayMs = 24 * 60 * 60 * 1000
+      afterTime = now - days * dayMs  // e.g. last X days
+      console.log(`afterTime for last ${days} days = ${new Date(afterTime).toLocaleString()}`)
+    }
+  }
 
   try {
-    const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, '' , 0)
+    // 1) Fetch raw "BLOG_POST" entries
+    const response = await searchSimple('BLOG_POST', cardIdentifierPrefix, '', 0, 0, '', false, true, afterTime)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
       cardsContainer.innerHTML = "<p>No cards found.</p>"
       return
     }
-    // Validate cards and filter
+    // 2) Validate structure
     const validatedCards = await Promise.all(
-      response.map(async card => {
+      response.map(async (card) => {
         const isValid = await validateCardStructure(card)
         return isValid ? card : null
       })
     )
-    const validCards = validatedCards.filter(card => card !== null)
+    const validCards = validatedCards.filter((card) => card !== null)
 
     if (validCards.length === 0) {
       cardsContainer.innerHTML = "<p>No valid cards found.</p>"
       return
     }
-    const finalCards = await processMinterCards(validCards)
+    // Additional logic for ARBoard or MinterCards
+    const finalCards = isARBoard
+      ? await processARBoardCards(validCards)
+      : await processMinterBoardCards(validCards)
 
-    // finalCards is already sorted by newest (timestamp) by processMinterCards. 
-    // We'll re-sort if "Name" or "Recent Comments" is selected.
-
-    // Grab the selected sort from the dropdown (if it exists).
+    // Sort finalCards according to selectedSort
     let selectedSort = 'newest'
     const sortSelect = document.getElementById('sort-select')
     if (sortSelect) {
@@ -304,229 +431,199 @@ const loadCards = async (cardIdentifierPrefix) => {
     }
 
     if (selectedSort === 'name') {
-	      // Sort alphabetically by the creator's name
       finalCards.sort((a, b) => {
         const nameA = a.name?.toLowerCase() || ''
         const nameB = b.name?.toLowerCase() || ''
         return nameA.localeCompare(nameB)
       })
     } else if (selectedSort === 'recent-comments') {
-	      // We need each card's newest comment timestamp for sorting
+      // If you need the newest comment timestamp
       for (let card of finalCards) {
         card.newestCommentTimestamp = await getNewestCommentTimestamp(card.identifier)
       }
-      // Then sort descending by newest comment
       finalCards.sort((a, b) =>
         (b.newestCommentTimestamp || 0) - (a.newestCommentTimestamp || 0)
       )
     } else if (selectedSort === 'least-votes') {
-      // For each card, fetch its poll data so we know how many admin + minter votes it has.
-      // Store those values on the card object so we can sort on them.
-      // Sort ascending by admin votes; if there's a tie, sort ascending by minter votes.
-      const minterGroupMembers = await fetchMinterGroupMembers()
-      const minterAdmins = await fetchMinterGroupAdmins()
-      // For each card, fetch the poll data & store counts on the card object.
-      for (const card of finalCards) {
-        try {
-          // We must fetch the card data from QDN to get the `poll` name
-          const cardDataResponse = await qortalRequest({
-            action: "FETCH_QDN_RESOURCE",
-            name: card.name,
-            service: "BLOG_POST",
-            identifier: card.identifier,
-          })
-          // If the card or poll is missing, skip
-          if (!cardDataResponse || !cardDataResponse.poll) {
-            card._adminVotes = 0
-            card._adminYes = 0
-            card._minterVotes = 0
-            card._minterYes = 0
-            continue
-          }
-          const pollResults = await fetchPollResults(cardDataResponse.poll)
-          const {
-            adminYes,
-            adminNo,
-            minterYes,
-            minterNo
-          } = await processPollData(
-            pollResults,
-            minterGroupMembers,
-            minterAdmins,
-            cardDataResponse.creator,
-            card.identifier
-          )
-          // Store the totals so we can sort on them
-          card._adminVotes = adminYes + adminNo
-          card._adminYes = adminYes
-          card._minterVotes = minterYes + minterNo
-          card._minterYes = minterYes
-        } catch (error) {
-          console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
-          // If something fails, default to zero so it sorts "lowest"
-          card._adminVotes = 0
-          card._adminYes = 0
-          card._minterVotes = 0
-          card._minterYes = 0
-        }
-      }
-      // Now that each card has _adminVotes + _minterVotes, do an ascending sort:
-      finalCards.sort((a, b) => {
-        // admin votes ascending
-        const diffAdminTotal = a._adminVotes - b._adminVotes
-        if (diffAdminTotal !== 0) return diffAdminTotal
-        // admin YES ascending
-        const diffAdminYes = a._adminYes - b._adminYes
-        if (diffAdminYes !== 0) return diffAdminYes
-        // minter votes ascending
-        const diffMinterTotal = a._minterVotes - b._minterVotes
-        if (diffMinterTotal !== 0) return diffMinterTotal
-        // minter YES ascending
-        return a._minterYes - b._minterYes
-      })
+      await applyVoteSortingData(finalCards, /* ascending= */ true)
     } else if (selectedSort === 'most-votes') {
-      // Fetch poll data & store admin + minter votes as before.
-      // Sort descending by admin votes; if there's a tie, sort descending by minter votes.
-      const minterGroupMembers = await fetchMinterGroupMembers()
-      const minterAdmins = await fetchMinterGroupAdmins()
-      for (const card of finalCards) {
-        try {
-          const cardDataResponse = await qortalRequest({
-            action: "FETCH_QDN_RESOURCE",
-            name: card.name,
-            service: "BLOG_POST",
-            identifier: card.identifier,
-          })
-          if (!cardDataResponse || !cardDataResponse.poll) {
-            card._adminVotes = 0
-            card._adminYes = 0
-            card._minterVotes = 0
-            card._minterYes = 0
-            continue
-          }
-          const pollResults = await fetchPollResults(cardDataResponse.poll)
-          const {
-            adminYes,
-            adminNo,
-            minterYes,
-            minterNo
-          } = await processPollData(
-            pollResults,
-            minterGroupMembers,
-            minterAdmins,
-            cardDataResponse.creator,
-            card.identifier
-          )
-          card._adminVotes = adminYes + adminNo
-          card._adminYes = adminYes
-          card._minterVotes = minterYes + minterNo
-          card._minterYes = minterYes
-        } catch (error) {
-          console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
-          card._adminVotes = 0
-          card._adminYes = 0
-          card._minterVotes = 0
-          card._minterYes = 0
-        }
-      }
-      // Sort descending by admin votes, then minter votes
-      finalCards.sort((a, b) => {
-        // admin votes descending
-        const diffAdminTotal = b._adminVotes - a._adminVotes
-        if (diffAdminTotal !== 0) return diffAdminTotal
-        // admin YES descending
-        const diffAdminYes = b._adminYes - a._adminYes
-        if (diffAdminYes !== 0) return diffAdminYes
-        // minter votes descending
-        const diffMinterTotal = b._minterVotes - a._minterVotes
-        if (diffMinterTotal !== 0) return diffMinterTotal
-        // minter YES descending
-        return b._minterYes - a._minterYes
-      })
+      await applyVoteSortingData(finalCards, /* ascending= */ false)
     }
-    // else 'newest' => do nothing, finalCards stays in newest-first order
+    // else 'newest' => do nothing (already sorted newest-first by your process functions).
+    // Create the 'finalCardsArray' that includes the data, etc.
+    let finalCardsArray = []
 
-    // Display skeleton cards immediately
-    cardsContainer.innerHTML = ""
-    finalCards.forEach(card => {
-      const skeletonHTML = createSkeletonCardHTML(card.identifier)
-      cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
-    })
-
-    // Fetch and update each card
-    finalCards.forEach(async card => {
+    for (const card of finalCards) {
       try {
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
           name: card.name,
           service: "BLOG_POST",
-          identifier: card.identifier,
+          identifier: card.identifier
         })
-    
-        if (!cardDataResponse) {
-          console.warn(`Skipping invalid card: ${JSON.stringify(card)}`)
-          removeSkeleton(card.identifier)
-          return
-        }
-    
-        if (!cardDataResponse.poll) {
-          console.warn(`Skipping card with no poll: ${card.identifier}`)
-          removeSkeleton(card.identifier)
-          return
-        }
 
-        // Getting the poll owner address uses the same API call as public key, so takes the same time, but address will be needed later.
+        if (!cardDataResponse || !cardDataResponse.poll) {
+          // skip
+          console.warn(`Skipping card: missing data/poll. identifier=${card.identifier}`)
+          continue
+        }
+        // Extra validation: check poll ownership matches card publisher
         const pollPublisherAddress = await getPollOwnerAddress(cardDataResponse.poll)
-        // Getting the card publisher address to compare instead should cause faster loading, since getting the public key by name first gets the address then converts it
         const cardPublisherAddress = await fetchOwnerAddressFromName(card.name)
-
-        if (pollPublisherAddress != cardPublisherAddress) {
-          console.warn(`not displaying card, QuickMythril pollHijack attack found! Discarding card with identifier: ${card.identifier}`)
-          removeSkeleton(card.identifier)
-          return
+        if (pollPublisherAddress !== cardPublisherAddress) {
+          console.warn(`Poll hijack attack found, discarding card ${card.identifier}`)
+          continue
         }
-        const pollResults = await fetchPollResults(cardDataResponse.poll)
-        const bgColor = generateDarkPastelBackgroundBy(card.name)
-        const commentCount = await countComments(card.identifier)
-        const cardUpdatedTime = card.updated || null
-
+        // If ARBoard, do a quick address check
         if (isARBoard) {
-          const name = await getNameInfo(cardDataResponse.minterName)
-          const address = name.owner
-          if (minterAdminAddresses && minterGroupAddresses) {
-            if (!minterAdminAddresses.includes(address) && !minterGroupAddresses.includes(address)) {
-              console.warn(`Found card from ARBoard that contained a non-minter!`)
-              removeSkeleton(card.identifier)
-              return
-            }
-          } else if (!minterAdminAddresses || !minterGroupAddresses){
-            const minterGroup = await fetchMinterGroupMembers()
-            const adminGroup = await fetchMinterGroupAdmins()
-            minterAdminAddresses = adminGroup.map(m => m.member)
-            minterGroupAddresses = minterGroup.map(m => m.member)
-            if (!minterAdminAddresses.includes(address) && !minterGroupAddresses.includes(address)) {
-              console.warn(`Found card from ARBoard that contained a non-minter!`)
-              removeSkeleton(card.identifier)
-              return
-            }
+          const ok = await verifyARBoardAddress(cardDataResponse.minterName)
+          if (!ok) {
+            console.warn(`Invalid minter address for AR board. identifier=${card.identifier}`)
+            continue
           }
         }
-
-        const finalCardHTML = isARBoard ? // If we're calling from the ARBoard, we will create HTML with a different function.
-        await createARCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor) 
-        : 
-        await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor, cardPublisherAddress)
-        replaceSkeleton(card.identifier, finalCardHTML)
-
-      } catch (error) {
-        console.error(`Error processing card ${card.identifier}:`, error)
-        removeSkeleton(card.identifier)
+        // **Push** to finalCardsArray for further processing (duplicates, etc.)
+        finalCardsArray.push({
+          ...card,
+          cardDataResponse,
+          pollPublisherAddress,
+          cardPublisherAddress,
+        })
+      } catch (err) {
+        console.error(`Error preparing card ${card.identifier}`, err)
       }
-    })
-    
+    }
+
+    // This will now allow duplicates to be displayed, but also mark the duplicates correctly. There is one bugged identifier that must be handled opposite.
+    // finalCardsArray = markDuplicates(finalCardsArray)
+
+    // Next, do the actual rendering:
+    cardsContainer.innerHTML = ""
+    for (const cardObj of finalCardsArray) {
+      // Insert a skeleton first if you like
+      const skeletonHTML = createSkeletonCardHTML(cardObj.identifier)
+      cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
+      // Build final HTML
+      const pollResults = await fetchPollResults(cardObj.cardDataResponse.poll)
+      const commentCount = await countComments(cardObj.identifier)
+      const cardUpdatedTime = cardObj.updated || null
+      const bgColor = generateDarkPastelBackgroundBy(cardObj.name)
+      // Construct the final HTML for each card
+      const finalCardHTML = isARBoard
+        ? await createARCardHTML(
+            cardObj.cardDataResponse,
+            pollResults,
+            cardObj.identifier,
+            commentCount,
+            cardUpdatedTime,
+            bgColor,
+            cardObj.cardPublisherAddress,
+            cardObj.isDuplicate
+          )
+        : await createCardHTML(
+            cardObj.cardDataResponse,
+            pollResults,
+            cardObj.identifier,
+            commentCount,
+            cardUpdatedTime,
+            bgColor,
+            cardObj.cardPublisherAddress
+          )
+
+      replaceSkeleton(cardObj.identifier, finalCardHTML)
+    }
+
   } catch (error) {
     console.error("Error loading cards:", error)
     cardsContainer.innerHTML = "<p>Failed to load cards.</p>"
+  }
+}
+
+const verifyARBoardAddress = async (minterName) => {
+  try {
+    const nameInfo = await getNameInfo(minterName)
+
+    if (!nameInfo) return false
+    const minterAddress = nameInfo.owner
+    const isValid = await getAddressInfo(minterAddress)
+
+    if (!isValid) return false
+    // Then check if they're in the minter group
+    const minterGroup = await fetchMinterGroupMembers()
+    const adminGroup = await fetchMinterGroupAdmins()
+    const minterGroupAddresses = minterGroup.map(m => m.member)
+    const adminGroupAddresses = adminGroup.map(m => m.member)
+
+    return (minterGroupAddresses.includes(minterAddress) ||
+            adminGroupAddresses.includes(minterAddress))
+  } catch (err) {
+    console.warn("verifyARBoardAddress error:", err)
+    return false
+  }
+}
+
+const applyVoteSortingData = async (cards, ascending = true) => {
+  const minterGroupMembers = await fetchMinterGroupMembers()
+  const minterAdmins = await fetchMinterGroupAdmins()
+
+  for (const card of cards) {
+    try {
+      const cardDataResponse = await qortalRequest({
+        action: "FETCH_QDN_RESOURCE",
+        name: card.name,
+        service: "BLOG_POST",
+        identifier: card.identifier,
+      })
+      if (!cardDataResponse || !cardDataResponse.poll) {
+        card._adminVotes = 0
+        card._adminYes = 0
+        card._minterVotes = 0
+        card._minterYes = 0
+        continue
+      }
+      const pollResults = await fetchPollResults(cardDataResponse.poll);
+      const { adminYes, adminNo, minterYes, minterNo } = await processPollData(
+        pollResults,
+        minterGroupMembers,
+        minterAdmins,
+        cardDataResponse.creator,
+        card.identifier
+      )
+      card._adminVotes = adminYes + adminNo
+      card._adminYes = adminYes
+      card._minterVotes = minterYes + minterNo
+      card._minterYes = minterYes
+    } catch (error) {
+      console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
+      card._adminVotes = 0
+      card._adminYes = 0
+      card._minterVotes = 0
+      card._minterYes = 0
+    }
+  }
+
+  if (ascending) {
+    // least votes first
+    cards.sort((a, b) => {
+      const diffAdminTotal = a._adminVotes - b._adminVotes
+      if (diffAdminTotal !== 0) return diffAdminTotal
+      const diffAdminYes = a._adminYes - b._adminYes
+      if (diffAdminYes !== 0) return diffAdminYes
+      const diffMinterTotal = a._minterVotes - b._minterVotes
+      if (diffMinterTotal !== 0) return diffMinterTotal
+      return a._minterYes - b._minterYes
+    })
+  } else {
+    // most votes first
+    cards.sort((a, b) => {
+      const diffAdminTotal = b._adminVotes - a._adminVotes
+      if (diffAdminTotal !== 0) return diffAdminTotal
+      const diffAdminYes = b._adminYes - a._adminYes
+      if (diffAdminYes !== 0) return diffAdminYes
+      const diffMinterTotal = b._minterVotes - a._minterVotes
+      if (diffMinterTotal !== 0) return diffMinterTotal
+      return b._minterYes - a._minterYes
+    })
   }
 }
 

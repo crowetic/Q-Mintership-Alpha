@@ -28,10 +28,10 @@ async function loadMinterAdminToolsPage() {
             <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; margin-right: 10px;">
             <span>${userState.accountName || 'Guest'}</span>
           </div>
-          <div><h2>No Functionality Here Yet</h2></div>
+          <div><h2>COMING SOON...</h2></div>
           <div>
-          <p>This page is still under development. Until the final Mintership proposal modifications are made, and the MINTER group is transferred to null, there is no need for this page's functionality. The page will be updated when the final modifications are made.</p>
-          <p> This page until then is simply a placeholder.</p>
+          <p>This page will have functionality to assist the Minter Admins in performing their duties. It will display all pending transactions (of any kind they can approve/deny) along with that ability. It can also be utilized to obtain more in-depth information about existing accounts.</p>
+          <p> The page will be getting a significant overhaul in the near(ish) future, as the MINTER group is now owned by null, and we are past the 'temporary state' we were in for much longer than planned.</p>
           </div>
         </div>
          

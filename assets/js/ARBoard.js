@@ -59,6 +59,13 @@ const loadAddRemoveAdminPage = async () => {
         <div id="existing-proposals-section" class="proposals-section" style="margin-top: 3em; display: flex; flex-direction: column; justify-content: center; align-items: center;">
             <h3 style="color: #ddd;">Existing Promotion/Demotion Proposals</h3>
             <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Proposal Cards</button>
+            <select id="time-range-select" style="margin-left: 10px; padding: 5px;">
+                <option value="0">Show All</option>
+                <option value="1">Last 1 day</option>
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
         </div>
         <div id="cards-container" class="cards-container" style="margin-top: 1rem"">
             <!-- We'll fill this with existing proposal cards -->
@@ -80,8 +87,8 @@ const loadAddRemoveAdminPage = async () => {
             // proposeButton.style.display === 'flex' ? 'none' : 'flex'
             
         } catch (error) {
-            console.error("Error checking for existing card:", error)
-            alert("Failed to check for existing card. Please try again.")
+            console.error("Error opening propose form", error)
+            alert("Failed to open proposal form. Please try again.")
         }
         })
 
@@ -126,79 +133,79 @@ const toggleProposeButton = () => {
     proposeButton.style.display === 'flex' ? 'none' : 'flex'
 }
 
-let addAdminTxs
-let remAdminTxs
-
 const fetchAllARTxData = async () => {
     const addAdmTx = "ADD_GROUP_ADMIN"
     const remAdmTx = "REMOVE_GROUP_ADMIN"
 
-    const filterAddTransactions = (rawTransactions) => {
-        // Group transactions by member
-        const memberTxMap = rawTransactions.reduce((map, tx) => {
-          if (!map[tx.member]) {
-            map[tx.member] = []
-          }
-          map[tx.member].push(tx)
-          return map
-        }, {})
-    
-        // Filter out members with both pending and non-pending transactions
-        return Object.values(memberTxMap)
-            .filter(txs => txs.every(tx => tx.approvalStatus !== 'PENDING'))
-            .flat()
-        //   .filter((txs) => !(txs.some(tx => tx.approvalStatus === 'PENDING') &&
-        //                      txs.some(tx => tx.approvalStatus !== 'PENDING')))
-        //   .flat()
-    }
-
-    const filterRemoveTransactions = (rawTransactions) => {
-    // Group transactions by member
-    const adminTxMap = rawTransactions.reduce((map, tx) => {
-        if (!map[tx.admin]) {
-        map[tx.admin] = []
-        }
-        map[tx.admin].push(tx)
-        return map
-    }, {})
-
-    // Filter out members with both pending and non-pending transactions
-    return Object.values(adminTxMap)
-        .filter((txs) => !(txs.some(tx => tx.approvalStatus === 'PENDING') &&
-                            txs.some(tx => tx.approvalStatus !== 'PENDING')))
-        .flat()
-    }
-  
-    // Fetch ban transactions
     const allAddTxs = await searchTransactions({
-      txTypes: [addAdmTx],
-      confirmationStatus: 'CONFIRMED',
-      limit: 0,
-      reverse: true,
-      offset: 0,
-      startBlock: 1990000,
-      blockLimit: 0,
-      txGroupId: 694,
-    })
-    // Filter out 'PENDING'
-    addAdminTxs = filterAddTransactions(allAddTxs)
-    console.warn('addAdminTxData (no PENDING nor past+PENDING):', addAdminTxs)
+        txTypes: [addAdmTx],
+        confirmationStatus: 'CONFIRMED',
+        limit: 0,
+        reverse: true,
+        offset: 0,
+        startBlock: 1990000,
+        blockLimit: 0,
+        txGroupId: 694,
+      })
   
-    // Fetch kick transactions
-    const allRemTxs = await searchTransactions({
-      txTypes: [remAdmTx],
-      confirmationStatus: 'CONFIRMED',
-      limit: 0,
-      reverse: true,
-      offset: 0,
-      startBlock: 1990000,
-      blockLimit: 0,
-      txGroupId: 694,
-    })
-    // Filter out 'PENDING'
-    remAdminTxs = filterRemoveTransactions(allRemTxs)
-    console.warn('remAdminTxData (no PENDING nor past+PENDING):', remAdminTxs)
-  }
+      const allRemTxs = await searchTransactions({
+        txTypes: [remAdmTx],
+        confirmationStatus: 'CONFIRMED',
+        limit: 0,
+        reverse: true,
+        offset: 0,
+        startBlock: 1990000,
+        blockLimit: 0,
+        txGroupId: 694,
+      })
+
+    const { finalAddTxs, pendingAddTxs } = partitionAddTransactions(allAddTxs)
+    const { finalRemTxs, pendingRemTxs } = partitionRemoveTransactions(allRemTxs)
+  
+    // We are going to keep all transactions in order to filter more accurately for display purposes.
+    console.log('Final addAdminTxs:', finalAddTxs);
+    console.log('Pending addAdminTxs:', pendingAddTxs);
+    console.log('Final remAdminTxs:', finalRemTxs);
+    console.log('Pending remAdminTxs:', pendingRemTxs);
+  
+    return {
+      finalAddTxs,
+      pendingAddTxs,
+      finalRemTxs,
+      pendingRemTxs,
+    }
+}
+  
+function partitionAddTransactions(rawTransactions) {
+    const finalAddTxs = []
+    const pendingAddTxs = []
+  
+    for (const tx of rawTransactions) {
+      if (tx.approvalStatus === 'PENDING') {
+        pendingAddTxs.push(tx)
+      } else {
+        finalAddTxs.push(tx)
+      }
+    }
+  
+    return { finalAddTxs, pendingAddTxs };
+}
+  
+function partitionRemoveTransactions(rawTransactions) {
+    const finalRemTxs = []
+    const pendingRemTxs = []
+
+    for (const tx of rawTransactions) {
+        if (tx.approvalStatus === 'PENDING') {
+        pendingRemTxs.push(tx)
+        } else {
+        finalRemTxs.push(tx)
+        }
+    }
+
+    return { finalRemTxs, pendingRemTxs }
+}
+  
 
 const displayExistingMinterAdmins = async () => {
     const adminListContainer = document.getElementById("admin-list-container")
@@ -309,9 +316,10 @@ const handleProposeDemotion = async (adminName, adminAddress) => {
   
     // Notify the user to fill out the rest
     alert(`Admin "${adminName}" has been selected for demotion. Please fill out the rest of the form.`)
-  }
+}
+  
 
-  const fetchExistingARCard = async (cardIdentifierPrefix, minterName) => {
+const fetchExistingARCard = async (cardIdentifierPrefix, minterName) => {
     try {
       const response = await searchSimple(
         'BLOG_POST',
@@ -381,7 +389,7 @@ const handleProposeDemotion = async (adminName, adminAddress) => {
       console.error("Error fetching existing AR card:", error)
       return null
     }
-  }
+}
   
 
 const publishARCard = async (cardIdentifierPrefix) => {
@@ -726,8 +734,8 @@ const fallbackMinterCheck = async (minterName, minterGroupMembers, minterAdmins)
 }
   
 
-const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
-    const { minterName, header, content, links, creator, timestamp, poll, promotionCard } = cardData
+const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, cardPublisherAddress, illegalDuplicate) => {
+    const { minterName, minterAddress='priorToAddition', header, content, links, creator, timestamp, poll, promotionCard } = cardData
     const formattedDate = new Date(timestamp).toLocaleString()
     const minterAvatar = await getMinterAvatar(minterName)
     const creatorAvatar = await getMinterAvatar(creator)
@@ -744,7 +752,7 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
     // showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers, minterAdmins)
 
     if (typeof promotionCard === 'boolean') {
-      showPromotionCard = promotionCard;
+      showPromotionCard = promotionCard
     } else if (typeof promotionCard === 'string') {
       // Could be "true" or "false" or something else
       const lower = promotionCard.trim().toLowerCase()
@@ -790,41 +798,63 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
     let altText = ''
     const verifiedName = await validateMinterName(minterName)
   
-    if (verifiedName) {
+    if (verifiedName && !illegalDuplicate) {
       const accountInfo = await getNameInfo(verifiedName)
       const accountAddress = accountInfo.owner
+      const minterGroupAddresses = minterGroupMembers.map(m => m.member)
+      const adminAddresses = minterAdmins.map(m => m.member)
+      const existingAdmin = adminAddresses.includes(accountAddress)
+      const existingMinter = minterGroupAddresses.includes(accountAddress)
       console.log(`name is validated, utilizing for removal features...${verifiedName}`)
       const actionsHtmlCheck = await checkAndDisplayActions(adminYes, verifiedName, cardIdentifier)
       actionsHtml = actionsHtmlCheck
       
-      if (!addAdminTxs || !remAdminTxs) {
-        await fetchAllARTxData()
-      }
+      const { finalAddTxs, pendingAddTxs, finalRemTxs, pendingRemTxs } = await fetchAllARTxData()
 
-      if (addAdminTxs.some((addTx) => addTx.groupId === 694 && addTx.member === accountAddress)){
-        console.warn(`account was already adminified(PROMOTED), displaying as such...`)
+      const confirmedAdd = finalAddTxs.some(
+        (tx) => tx.groupId === 694 && tx.member === accountAddress
+      )
+      const userPendingAdd = pendingAddTxs.some(
+        (tx) => tx.groupId === 694 && tx.member === accountAddress
+      )
+      const confirmedRemove = finalRemTxs.some(
+        (tx) => tx.groupId === 694 && tx.admin === accountAddress
+      )
+      const userPendingRemove = pendingRemTxs.some(
+        (tx) => tx.groupId === 694 && tx.admin === accountAddress
+      )
+      
+      // If user is definitely admin (finalAdd) and not pending removal
+      if (confirmedAdd && !userPendingRemove && existingAdmin) {
+        console.warn(`account was already admin, final. no add/remove pending.`);
         cardColorCode = 'rgb(3, 11, 24)'
-        altText  = `<h4 style="color:rgb(2, 94, 106); margin-bottom: 0.5em;">PROMOTED to ADMIN</h4>`
+        altText  = `<h4 style="color:rgb(2, 94, 106); margin-bottom: 0.5em;">PROMOTED to ADMIN</h4>`;
         actionsHtml = ''
-        // =============================================================== if 'showPromotedDemoted' is wanted to be added.
-        // if (!showPromotedDemoted){
-        //   console.warn(`promoted/demoted show checkbox is unchecked, and card is promoted, not displaying...`)
-        //   return ''
-        // }
+      } 
+
+      if (confirmedAdd && userPendingRemove && existingAdmin) {
+        console.warn(`user is a previously approved an admin, but now has pending removals. Keeping html`)
       }
       
-      if (remAdminTxs.some((remTx) => remTx.groupId === 694 && remTx.admin === accountAddress)){
-        console.warn(`account was already UNadminified(DEMOTED), displaying as such...`)
+      // If user has a final "remove" and no pending additions or removals
+      if (confirmedRemove && !userPendingAdd && existingMinter) {
+        console.warn(`account was demoted, final. no add pending, existingMinter.`);
         cardColorCode = 'rgb(29, 4, 6)'
         altText  = `<h4 style="color:rgb(73, 24, 24); margin-bottom: 0.5em;">DEMOTED from ADMIN</h4>`
         actionsHtml = ''
-
-        // if (!showPromotedDemoted) {
-        //   console.warn(`promoted/demoted show checkbox is unchecked, card is demoted, not displaying...`)
-        //   return ''
-        // }
       }
       
+      // If user has both final remove and pending add, do something else
+      if (confirmedRemove && userPendingAdd && existingMinter) {
+        console.warn(`account was previously demoted, but also a pending re-add, allowing actions to show...`)
+        // Possibly show "DEMOTED but re-add in progress" or something
+      }
+      
+    } else if ( verifiedName && illegalDuplicate) {
+        console.warn(`illegalDuplicate detected (this card was somehow allowed to be published twice, keeping newest as active to prevent issues with old cards and updates, but displaying without actions...)`)
+        cardColorCode = 'rgb(82, 81, 81)'
+        altText  = `<h4 style="color:rgb(21, 30, 39); margin-bottom: 0.5em;">DUPLICATE (diplayed for data only)</h4>`
+        actionsHtml = ''
     } else {
       console.warn(`name could not be validated, not setting actionsHtml`)
       actionsHtml = ''

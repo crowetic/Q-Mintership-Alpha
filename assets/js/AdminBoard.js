@@ -83,6 +83,13 @@ const loadAdminBoardPage = async () => {
       <option value="least-votes">Least Votes</option>
       <option value="most-votes">Most Votes</option>
     </select>
+    <select id="time-range-select" style="margin-left: 10px; padding: 5px;">
+        <option value="0">Show All</option>
+        <option value="1">Last 1 day</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
     <div class="show-card-checkbox" style="margin-top: 1em;">
       <input type="checkbox" id="admin-show-hidden-checkbox" name="adminHidden" />
       <label for="admin-show-hidden-checkbox">Show User-Hidden Cards?</label>
@@ -327,8 +334,20 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
   const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
   encryptedCardsContainer.innerHTML = "<p>Loading cards...</p>"
 
+  let afterTime = null
+  const timeRangeSelect = document.getElementById("time-range-select")
+  if (timeRangeSelect) {
+    const days = parseInt(timeRangeSelect.value, 10)
+    if (days > 0) {
+      const now = Date.now()
+      const dayMs = 24 * 60 * 60 * 1000
+      afterTime = now - days * dayMs  // e.g. last X days
+      console.log(`afterTime for last ${days} days = ${new Date(afterTime).toLocaleString()}`)
+    }
+  }
+
   try {
-    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0)
+    const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0, 0, '', false, true, afterTime)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
       encryptedCardsContainer.innerHTML = "<p>No cards found.</p>"
@@ -379,12 +398,13 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
     const latestCardsMap = new Map()
 
     validCardsWithData.forEach(({ card, decryptedCardData }) => {
-      const timestamp = card.updated || card.created || 0
+      const timestamp = card.created || 0
       const existingCard = latestCardsMap.get(card.identifier)
 
-      if (!existingCard || timestamp > (existingCard.card.updated || existingCard.card.created || 0)) {
+      if (!existingCard || timestamp < (existingCard.card.updated || existingCard.card.created || 0)) {
         latestCardsMap.set(card.identifier, { card, decryptedCardData })
-      }
+      } 
+
     })
 
     const uniqueValidCards = Array.from(latestCardsMap.values())
@@ -396,13 +416,11 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
       const obtainedMinterName = decryptedCardData.minterName
       // Only check for cards that are NOT topic-based cards
       if ((!decryptedCardData.isTopic) || decryptedCardData.isTopic === 'false') {
-        const cardTimestamp = card.updated || card.created || 0
 
         if (obtainedMinterName) {
           const existingEntry = mostRecentCardsMap.get(obtainedMinterName)
 
-          // Replace only if the current card is more recent
-          if (!existingEntry || cardTimestamp > (existingEntry.card.updated || existingEntry.card.created || 0)) {
+          if (!existingEntry) {
             mostRecentCardsMap.set(obtainedMinterName, { card, decryptedCardData })
           }
         }
@@ -414,7 +432,7 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
     })
 
     // Convert the map into an array of final cards
-    const finalCards = Array.from(mostRecentCardsMap.values());
+    const finalCards = Array.from(mostRecentCardsMap.values())
 
     let selectedSort = 'newest'
     const sortSelect = document.getElementById('sort-select')
@@ -1037,7 +1055,7 @@ const processQortalLinkForRendering = async (link) => {
   return link
 }
 
-const checkAndDisplayRemoveActions = async (adminYes, name, cardIdentifier) => {
+const checkAndDisplayRemoveActions = async (adminYes, name, cardIdentifier, nameIsActuallyAddress = false) => {
   const latestBlockInfo = await getLatestBlockInfo()
   const isBlockPassed = latestBlockInfo.height >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT 
   let minAdminCount 
@@ -1052,10 +1070,15 @@ const checkAndDisplayRemoveActions = async (adminYes, name, cardIdentifier) => {
     minAdminCount = Math.round(fortyPercent)
     console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
   }
-  if (isBlockPassed && userState.isMinterAdmin) {
+  if (isBlockPassed && (userState.isMinterAdmin || userState.isAdmin)) {
     console.warn(`feature trigger has passed, checking for approval requirements`)
-    const addressInfo = await getNameInfo(name)
-    const address = addressInfo.owner
+    let address 
+    if (!nameIsActuallyAddress){
+      const nameInfo = await getNameInfo(name)
+      address = nameInfo.owner
+    } else {
+      address = name
+    }
     const kickApprovalHtml = await checkGroupApprovalAndCreateButton(address, cardIdentifier, "GROUP_KICK")
     const banApprovalHtml = await checkGroupApprovalAndCreateButton(address, cardIdentifier, "GROUP_BAN")
     
@@ -1068,7 +1091,7 @@ const checkAndDisplayRemoveActions = async (adminYes, name, cardIdentifier) => {
     }
   }
   
-  if (adminYes >= minAdminCount && userState.isMinterAdmin) {
+  if (adminYes >= minAdminCount && (userState.isMinterAdmin || userState.isAdmin)) {
     const removeButtonHtml = createRemoveButtonHtml(name, cardIdentifier)
     return removeButtonHtml
   } else{
@@ -1098,6 +1121,8 @@ const createRemoveButtonHtml = (name, cardIdentifier) => {
 
 const handleKickMinter = async (minterName) => {
   try {
+    isAddress = await getAddressInfo(minterName)
+
     // Optional block check
     let txGroupId = 0
     // const { height: currentHeight } = await getLatestBlockInfo()
@@ -1108,8 +1133,14 @@ const handleKickMinter = async (minterName) => {
     }
 
     // Get the minter address from name info
-    const minterNameInfo = await getNameInfo(minterName)
-    const minterAddress = minterNameInfo?.owner
+    let minterAddress
+    if (!isAddress){
+      const minterNameInfo = await getNameInfo(minterName)
+      minterAddress = minterNameInfo?.owner
+    } else {
+      minterAddress = minterName
+    }
+    
     if (!minterAddress) {
       alert(`No valid address found for minter name: ${minterName}, this should NOT have happened, please report to developers...`)
       return
@@ -1150,6 +1181,7 @@ const handleKickMinter = async (minterName) => {
 }
 
 const handleBanMinter = async (minterName) => {
+  isAddress = await getAddressInfo(minterName)
   try {
     let txGroupId = 0
     // const { height: currentHeight } = await getLatestBlockInfo()
@@ -1161,9 +1193,13 @@ const handleBanMinter = async (minterName) => {
       console.log(`featureTrigger block is passed, using txGroupId 694`)
       txGroupId = 694
     }
-
-    const minterNameInfo = await getNameInfo(minterName)
-    const minterAddress = minterNameInfo?.owner
+    let minterAddress
+    if (!isAddress) {
+      const minterNameInfo = await getNameInfo(minterName)
+      const minterAddress = minterNameInfo?.owner
+    } else {
+      minterAddress = minterName
+    }
 
     if (!minterAddress) {
       alert(`No valid address found for minter name: ${minterName}, this should NOT have happened, please report to developers...`)
@@ -1236,7 +1272,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   const showKickedBanned = document.getElementById('admin-show-kicked-banned-checkbox')?.checked ?? false
   const showHiddenAdminCards = document.getElementById('admin-show-hidden-checkbox')?.checked ?? false
 
-  const isUndefinedUser = (minterName === 'undefined')
+  const isUndefinedUser = (minterName === 'undefined' || minterName === 'null')
 
   const hasTopicMode = Object.prototype.hasOwnProperty.call(cardData, 'topicMode')
 
@@ -1254,7 +1290,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   let cardColorCode = showTopic ? '#0e1b15' : '#151f28'
 
   const minterOrTopicHtml = ((showTopic) || (isUndefinedUser)) ? `
-    <div class="support-header"><h5> REGARDING (Topic): </h5></div>
+    <div class="support-header"><h5> REGARDING (Topic / Address): </h5></div>
     <h3>${minterName}` :
     `
     <div class="support-header"><h5> REGARDING (Name): </h5></div>
@@ -1274,16 +1310,23 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   let adjustmentText = ''
   const verifiedName = await validateMinterName(minterName)
   let levelText = '</h3>'
+  const addressVerification = await getAddressInfo(minterName)
+  const verifiedAddress = addressVerification.address 
 
-  if (verifiedName) {
-    const accountInfo = await getNameInfo(verifiedName)
-    const accountAddress = accountInfo.owner
-    const addressInfo = await getAddressInfo(accountAddress)
+  if (verifiedName || verifiedAddress) {
+    let accountInfo
+    if (!verifiedAddress){
+      accountInfo = await getNameInfo(verifiedName)
+    }
+      
+      const accountAddress = verifiedAddress ?  addressVerification.address : accountInfo.owner
+      const addressInfo =  verifiedAddress ? addressVerification : await getAddressInfo(accountAddress)
+    
     levelText = ` - Level ${addressInfo.level}</h3>`
     console.log(`name is validated, utilizing for removal features...${verifiedName}`)
     penaltyText = addressInfo.blocksMintedPenalty == 0 ? '' : '<p>(has Blocks Penalty)<p>'
     adjustmentText = addressInfo.blocksMintedAdjustment == 0 ? '' : '<p>(has Blocks Adjustment)<p>'
-    const removeActionsHtml = await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
+    const removeActionsHtml = verifiedAddress ? await checkAndDisplayRemoveActions(adminYes, verifiedAddress, cardIdentifier) :  await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
     showRemoveHtml = removeActionsHtml
     if (userVote === 0) {
       cardColorCode = "rgba(1, 65, 39, 0.41)"; // or any green you want
