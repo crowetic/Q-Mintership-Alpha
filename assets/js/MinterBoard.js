@@ -475,7 +475,7 @@ const loadCards = async (cardIdentifierPrefix) => {
             continue
           }
         } else {
-          const isAlreadyMinter = await verifyMinter(cardDataResponse.minterName)
+          const isAlreadyMinter = await verifyMinter(cardDataResponse.creator)
           if (isAlreadyMinter) {
             console.warn(`card IS ALREADY a minter, NOT displaying following identifier on the MinterBoard: ${card.identifier}`)
             removeSkeleton(card.identifier)

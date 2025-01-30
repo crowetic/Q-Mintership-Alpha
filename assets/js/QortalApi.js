@@ -252,7 +252,7 @@ const fetchOwnerAddressFromName = async (name) => {
     console.log('fetchOwnerAddressFromName called')
     console.log('name:', name)
     try {
-        const response = await fetch(`${baseUrl}/names/${name}`, {
+        const response = await fetch(`${baseUrl}/names/${encodeURIComponent(name)}`, {
             headers: { 'Accept': 'application/json' },
             method: 'GET',
         })
