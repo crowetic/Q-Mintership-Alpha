@@ -117,6 +117,13 @@ const loadAddRemoveAdminPage = async () => {
         linksContainer.appendChild(newLinkInput)
     })
 
+    const timeRangeSelectCheckbox = document.getElementById('time-range-select')
+    if (timeRangeSelectCheckbox) {
+        timeRangeSelectCheckbox.addEventListener('change', async (event) => {
+        await loadCards(addRemoveIdentifierPrefix)
+        })
+    }
+
     document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
         event.preventDefault()
         await publishARCard(addRemoveIdentifierPrefix)
