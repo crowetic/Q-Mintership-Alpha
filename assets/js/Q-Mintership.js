@@ -470,6 +470,7 @@ let selectedImages = []
 let selectedFiles = []
 let multiResource = []
 let attachmentIdentifiers = []
+let editMessageIdentifier = null
 
 // Set up file input handling
 const setupFileInputs = (room) => {
@@ -560,9 +561,14 @@ const processSelectedImages = async (selectedImages, multiResource, room) => {
 
 // Handle send message
 const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImages, multiResource) => {
-  const messageIdentifier = room === "admins"
-    ? `${messageIdentifierPrefix}-${room}-e-${randomID()}`
-    : `${messageIdentifierPrefix}-${room}-${randomID()}`
+  let messageIdentifier
+  if (editMessageIdentifier) {
+    messageIdentifier = editMessageIdentifier
+  } else {
+    messageIdentifier = room === "admins"
+      ? `${messageIdentifierPrefix}-${room}-e-${randomID()}`
+      : `${messageIdentifierPrefix}-${room}-${randomID()}`
+  }
 
   try {
     // Process selected images
@@ -674,6 +680,34 @@ const handleDeleteMessage = async (room, existingMessageIdentifier) => {
   }
 }
 
+const handleEditMessage = async (room, existingMessageIdentifier) => {
+  try {
+    const editedMessageObject = {
+      messageHtml: "", // TODO: Add Quill editor content here
+      hasAttachment: false,
+      attachments: [],
+      replyTo: null
+    }
+    const base64Message = btoa(JSON.stringify(editedMessageObject))
+    const service = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST"
+    const request = {
+      action: 'PUBLISH_QDN_RESOURCE',
+      name: userState.accountName,
+      service: service,
+      identifier: existingMessageIdentifier,
+      data64: base64Message
+    }
+    if (room === "admins") {
+      request.encrypt = true
+      request.publicKeys = adminPublicKeys
+    }
+    console.log("Editing forum message...")
+    await qortalRequest(request)
+  } catch (err) {
+    console.error("Error editing message:", err)
+  }
+}
+
 function clearInputs() {
   // Clear the file input elements and preview container
   document.getElementById('file-input').value = ''
@@ -691,6 +725,7 @@ function clearInputs() {
   attachmentIdentifiers = []
   selectedImages = []
   selectedFiles = []
+  editMessageIdentifier = null
 
   // Remove the reply container
   const replyContainer = document.querySelector('.reply-container')
@@ -790,6 +825,7 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
 
     handleReplyLogic(fetchMessages)
     handleDeleteLogic(fetchMessages, room)
+    handleEditLogic(fetchMessages, room)
 
     await updatePaginationControls(room, limit)
   } catch (error) {
@@ -1010,12 +1046,20 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
   const attachmentHtml = await buildAttachmentHtml(message, room)
   const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`
   let deleteButtonHtml = ''
+  let editButtonHtml = ''
   if (message.name === userState.accountName) {
     deleteButtonHtml = `
       <button class="delete-button" 
               data-message-identifier="${message.identifier}"
               data-room="${room}">
         Delete
+      </button>
+    `
+    editButtonHtml = `
+      <button class="edit-button" 
+              data-message-identifier="${message.identifier}"
+              data-room="${room}">
+        Edit
       </button>
     `
   }
@@ -1036,7 +1080,7 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
         ${attachmentHtml}
       </div>
       <div class="message-actions">
-        ${deleteButtonHtml}
+        ${deleteButtonHtml}${editButtonHtml}
         <button class="reply-button" data-message-identifier="${message.identifier}">Reply</button>
       </div>
     </div>
@@ -1204,6 +1248,23 @@ const handleDeleteLogic = (fetchMessages, room) => {
         if (!confirmed) return
         await handleDeleteMessage(postRoom, messageId)
       }
+    })
+  })
+}
+
+const handleEditLogic = (fetchMessages, room) => {
+  // Only select buttons that do NOT already have a listener
+  const editButtons = document.querySelectorAll('.edit-button:not(.bound-edit)')
+  editButtons.forEach(button => {
+    button.classList.add('bound-edit')
+    button.addEventListener('click', async () => {
+      const existingMessageIdentifier = button.dataset.messageIdentifier
+      const originalMessage = messagesById[existingMessageIdentifier]
+      if (!originalMessage) return
+      editMessageIdentifier = existingMessageIdentifier
+      const quill = new Quill('#editor')
+      quill.clipboard.dangerouslyPasteHTML(originalMessage.content)
+      // Optionally show a small notice: "Editing message..."
     })
   })
 }

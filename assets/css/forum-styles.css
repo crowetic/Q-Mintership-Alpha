@@ -178,6 +178,21 @@
   background-color: #3d1919;
 }
 
+.edit-button {
+  align-self: flex-end;
+  margin-top: 1vh;
+  background-color: #897016;
+  color: #ffffff;
+  border: none;
+  border-radius: 1vh;
+  padding: 0.3vh 0.6vh;
+  cursor: pointer;
+}
+
+.edit-button:hover {
+  background-color: #402d09;
+}
+
 /* forum-styles.css additions */
 
 .message-input-section {
