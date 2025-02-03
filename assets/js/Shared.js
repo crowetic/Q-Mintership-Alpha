@@ -240,10 +240,10 @@ const sortCards = async (cardsArray, selectedSort, board) => {
       })
       break
     case 'least-votes':
-      await applyVoteSortingData(cardsArray, /* ascending= */ true)
+      await applyVoteSortingData(cardsArray, /* ascending= */ true, board)
       break
     case 'most-votes':
-      await applyVoteSortingData(cardsArray, /* ascending= */ false)
+      await applyVoteSortingData(cardsArray, /* ascending= */ false, board)
       break
     default:
       // Sort by date
@@ -278,36 +278,71 @@ const getNewestCommentTimestamp = async (cardIdentifier, board) => {
   }
 }
   
-const applyVoteSortingData = async (cards, ascending = true) => {
+const applyVoteSortingData = async (cards, ascending = true, boardType = 'minter') => {
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
   for (const card of cards) {
     try {
-      const cardDataResponse = await qortalRequest({
-        action: "FETCH_QDN_RESOURCE",
-        name: card.name,
-        service: "BLOG_POST",
-        identifier: card.identifier,
-      })
-      if (!cardDataResponse || !cardDataResponse.poll) {
-        card._adminVotes = 0
-        card._adminYes = 0
-        card._minterVotes = 0
-        card._minterYes = 0
-        continue
+      if (boardType === 'admin') {
+        // For the Admin board, we already have the poll name in `card.decryptedCardData.poll`
+        // No need to fetch the resource from BLOG_POST
+        const pollName = card.decryptedCardData?.poll
+        if (!pollName) {
+          // No poll => no votes
+          card._adminVotes = 0
+          card._adminYes = 0
+          card._minterVotes = 0
+          card._minterYes = 0
+          continue
+        }
+        // Fetch poll results
+        const pollResults = await fetchPollResults(pollName)
+        if (!pollResults) {
+          card._adminVotes = 0
+          card._adminYes = 0
+          card._minterVotes = 0
+          card._minterYes = 0
+          continue
+        }
+        // Process them
+        const { adminYes, adminNo, minterYes, minterNo } = await processPollData(
+          pollResults, 
+          minterGroupMembers, 
+          minterAdmins,
+          card.decryptedCardData.creator, 
+          card.card.identifier
+        )
+        card._adminVotes = adminYes + adminNo
+        card._adminYes = adminYes
+        card._minterVotes = minterYes + minterNo
+        card._minterYes = minterYes
+      } else {
+        const cardDataResponse = await qortalRequest({
+          action: "FETCH_QDN_RESOURCE",
+          name: card.name,
+          service: "BLOG_POST",
+          identifier: card.identifier,
+        })
+        if (!cardDataResponse || !cardDataResponse.poll) {
+          card._adminVotes = 0
+          card._adminYes = 0
+          card._minterVotes = 0
+          card._minterYes = 0
+          continue
+        }
+        const pollResults = await fetchPollResults(cardDataResponse.poll);
+        const { adminYes, adminNo, minterYes, minterNo } = await processPollData(
+          pollResults,
+          minterGroupMembers,
+          minterAdmins,
+          cardDataResponse.creator,
+          card.identifier
+        )
+        card._adminVotes = adminYes + adminNo
+        card._adminYes = adminYes
+        card._minterVotes = minterYes + minterNo
+        card._minterYes = minterYes
       }
-      const pollResults = await fetchPollResults(cardDataResponse.poll);
-      const { adminYes, adminNo, minterYes, minterNo } = await processPollData(
-        pollResults,
-        minterGroupMembers,
-        minterAdmins,
-        cardDataResponse.creator,
-        card.identifier
-      )
-      card._adminVotes = adminYes + adminNo
-      card._adminYes = adminYes
-      card._minterVotes = minterYes + minterNo
-      card._minterYes = minterYes
     } catch (error) {
       console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
       card._adminVotes = 0
