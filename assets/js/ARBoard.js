@@ -153,6 +153,19 @@ const toggleProposeButton = () => {
     proposeButton.style.display === 'flex' ? 'none' : 'flex'
 }
 
+const toggleAdminTable = () => {
+    const tableContainer = document.getElementById("adminTableContainer")
+    const toggleBtn = document.getElementById("toggleAdminTableButton")
+
+    if (tableContainer.style.display === "none") {
+        tableContainer.style.display = "block"
+        toggleBtn.textContent = "Hide Minter Admins"
+    } else {
+        tableContainer.style.display = "none"
+        toggleBtn.textContent = "Show Minter Admins"
+    }
+}
+
 const fetchAllARTxData = async () => {
     const addAdmTx = "ADD_GROUP_ADMIN"
     const remAdmTx = "REMOVE_GROUP_ADMIN"
@@ -285,6 +298,22 @@ const displayExistingMinterAdmins = async () => {
         }
         // 3) Build the table
         const tableHtml = `
+          <div style="text-align: center; margin-bottom: 1em;">
+            <button
+              id="toggleAdminTableButton"
+              onclick="toggleAdminTable()"
+              style="
+                padding: 10px;
+                background: #444;
+                color: #fff;
+                border-radius: 5px;
+                cursor: pointer;
+              "
+            >
+              Show Minter Admins
+            </button>
+          </div>
+          <div id="adminTableContainer" style="display: none;">
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="background:rgb(21, 36, 18); color:rgb(183, 208, 173); font-size: 1.5rem;">
@@ -297,6 +326,7 @@ const displayExistingMinterAdmins = async () => {
                     ${rowsHtml}
                 </tbody>
             </table>
+          </div>
         `
         adminListContainer.innerHTML = `
             <h3 style="color:rgb(212, 212, 212);">Existing Minter Admins: ${totalAdmins}</h3>
