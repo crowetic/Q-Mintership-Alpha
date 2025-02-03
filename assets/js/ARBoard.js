@@ -248,6 +248,25 @@ const displayExistingMinterAdmins = async () => {
     try {
         // 1) Fetch addresses
         const admins = await fetchMinterGroupAdmins()
+        // Get names for each admin first
+        for (const admin of admins) {
+            try {
+                admin.name = await getNameFromAddress(admin.member)
+            } catch (err) {
+                console.warn(`Error fetching name for ${admin.member}:`, err)
+                admin.name = null
+            }
+        }
+        // Sort admin list by name with NULL ACCOUNT at the top
+        admins.sort((a, b) => {
+            if (a.member === nullAddress && b.member !== nullAddress) {
+                return -1;
+            }
+            if (b.member === nullAddress && a.member !== nullAddress) {
+                return 1;
+            }
+            return (a.name || '').localeCompare(b.name || '');
+        })
         minterAdminAddresses = admins.map(m => m.member)
         // Compute total admin count and signatures needed (40%, rounded up)
         const totalAdmins = admins.length;
@@ -271,16 +290,8 @@ const displayExistingMinterAdmins = async () => {
                   </tr>
                 `
                 continue
-              }
-            // Attempt to get name
-            let adminName
-            try {
-                adminName = await getNameFromAddress(adminAddr.member)
-            } catch (err) {
-                console.warn(`Error fetching name for ${adminAddr.member}:`, err)
-                adminName = null
             }
-            const displayName = adminName && adminName !== adminAddr.member ? adminName : "(No Name)"
+            const displayName = adminAddr.name && adminAddr.name !== adminAddr.member ? adminAddr.name : "(No Name)"
             rowsHtml += `
                 <tr>
                 <td style="border: 1px solid rgb(150, 199, 224); font-size: 1.5rem; padding: 4px; color:rgb(70, 156, 196)">${displayName}</td>
@@ -288,7 +299,7 @@ const displayExistingMinterAdmins = async () => {
                 <td style="border: 1px solid rgb(231, 112, 112); padding: 4px;">
                 <button 
                 style="padding: 5px; background: red; color: white; border-radius: 3px; cursor: pointer;"
-                onclick="handleProposeDemotionWrapper('${adminName}', '${adminAddr.member}')"
+                onclick="handleProposeDemotionWrapper('${adminAddr.name}', '${adminAddr.member}')"
                 >
                 Propose Demotion
                 </button>
