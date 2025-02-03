@@ -236,6 +236,9 @@ const displayExistingMinterAdmins = async () => {
         // 1) Fetch addresses
         const admins = await fetchMinterGroupAdmins()
         minterAdminAddresses = admins.map(m => m.member)
+        // Compute total admin count and signatures needed (40%, rounded up)
+        const totalAdmins = admins.length;
+        const signaturesNeeded = Math.ceil(totalAdmins * 0.40);
         let rowsHtml = "";
         for (const adminAddr of admins) {
             if (adminAddr.member === nullAddress) {
@@ -295,7 +298,11 @@ const displayExistingMinterAdmins = async () => {
                 </tbody>
             </table>
         `
-        adminListContainer.innerHTML = tableHtml
+        adminListContainer.innerHTML = `
+            <h3 style="color:rgb(212, 212, 212);">Existing Minter Admins: ${totalAdmins}</h3>
+            <h4 style="color:rgb(212, 212, 212);">Signatures for Group Approval (40%): ${signaturesNeeded}</h4>
+            ${tableHtml}
+        `
     } catch (err) {
         console.error("Error fetching minter admins:", err)
         adminListContainer.innerHTML =
