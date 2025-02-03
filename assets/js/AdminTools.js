@@ -32,7 +32,7 @@ const loadMinterAdminToolsPage = async () => {
       
       <div id="tools-submenu" class="tools-submenu">
         <div class="tools-buttons" style="display: flex; gap: 1em; justify-content: center;">
-          <button id="toggle-blocklist-button" class="publish-card-button">Add/Remove blockedUsers</button>
+          <button id="toggle-blocklist-button" class="publish-card-button">Show/Hide blockedUsers</button>
           <button id="create-group-invite" class="publish-card-button">Create Pending Group Invite</button>
         </div>
         
