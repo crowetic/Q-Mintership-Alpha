@@ -289,19 +289,19 @@ const applyVoteSortingData = async (cards, ascending = true, boardType = 'minter
         const pollName = card.decryptedCardData?.poll
         if (!pollName) {
           // No poll => no votes
-          card._adminVotes = 0
           card._adminYes = 0
-          card._minterVotes = 0
+          card._adminNo = 0
           card._minterYes = 0
+          card._minterNo = 0
           continue
         }
         // Fetch poll results
         const pollResults = await fetchPollResults(pollName)
         if (!pollResults) {
-          card._adminVotes = 0
           card._adminYes = 0
-          card._minterVotes = 0
+          card._adminNo = 0
           card._minterYes = 0
+          card._minterNo = 0
           continue
         }
         // Process them
@@ -312,10 +312,10 @@ const applyVoteSortingData = async (cards, ascending = true, boardType = 'minter
           card.decryptedCardData.creator, 
           card.card.identifier
         )
-        card._adminVotes = adminYes + adminNo
         card._adminYes = adminYes
-        card._minterVotes = minterYes + minterNo
+        card._adminNo = adminNo
         card._minterYes = minterYes
+        card._minterNo = minterNo
       } else {
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
@@ -324,10 +324,10 @@ const applyVoteSortingData = async (cards, ascending = true, boardType = 'minter
           identifier: card.identifier,
         })
         if (!cardDataResponse || !cardDataResponse.poll) {
-          card._adminVotes = 0
           card._adminYes = 0
-          card._minterVotes = 0
+          card._adminNo = 0
           card._minterYes = 0
+          card._minterNo = 0
           continue
         }
         const pollResults = await fetchPollResults(cardDataResponse.poll);
@@ -338,40 +338,40 @@ const applyVoteSortingData = async (cards, ascending = true, boardType = 'minter
           cardDataResponse.creator,
           card.identifier
         )
-        card._adminVotes = adminYes + adminNo
         card._adminYes = adminYes
-        card._minterVotes = minterYes + minterNo
+        card._adminNo = adminNo
         card._minterYes = minterYes
+        card._minterNo = minterNo
       }
     } catch (error) {
       console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
-      card._adminVotes = 0
       card._adminYes = 0
-      card._minterVotes = 0
+      card._adminNo = 0
       card._minterYes = 0
+      card._minterNo = 0
     }
   }
   if (ascending) {
     // least votes first
     cards.sort((a, b) => {
-      const diffAdminTotal = a._adminVotes - b._adminVotes
-      if (diffAdminTotal !== 0) return diffAdminTotal
       const diffAdminYes = a._adminYes - b._adminYes
       if (diffAdminYes !== 0) return diffAdminYes
-      const diffMinterTotal = a._minterVotes - b._minterVotes
-      if (diffMinterTotal !== 0) return diffMinterTotal
-      return a._minterYes - b._minterYes
+      const diffAdminNo = b._adminNo - a._adminNo
+      if (diffAdminNo !== 0) return diffAdminNo
+      const diffMinterYes = a._minterYes - b._minterYes
+      if (diffMinterYes !== 0) return diffMinterYes
+      return b._minterNo - a._minterNo
     })
   } else {
     // most votes first
     cards.sort((a, b) => {
-      const diffAdminTotal = b._adminVotes - a._adminVotes
-      if (diffAdminTotal !== 0) return diffAdminTotal
       const diffAdminYes = b._adminYes - a._adminYes
       if (diffAdminYes !== 0) return diffAdminYes
-      const diffMinterTotal = b._minterVotes - a._minterVotes
-      if (diffMinterTotal !== 0) return diffMinterTotal
-      return b._minterYes - a._minterYes
+      const diffAdminNo = a._adminNo - b._adminNo
+      if (diffAdminNo !== 0) return diffAdminNo
+      const diffMinterYes = b._minterYes - a._minterYes
+      if (diffMinterYes !== 0) return diffMinterYes
+      return a._minterNo - b._minterNo
     })
   }
 }
