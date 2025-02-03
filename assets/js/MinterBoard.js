@@ -439,31 +439,15 @@ const loadCards = async (cardIdentifierPrefix) => {
       selectedSort = sortSelect.value
     }
 
-    if (selectedSort === 'name') {
-      finalCards.sort((a, b) => {
-        const nameA = a.name?.toLowerCase() || ''
-        const nameB = b.name?.toLowerCase() || ''
-        return nameA.localeCompare(nameB)
-      })
-    } else if (selectedSort === 'recent-comments') {
-      // If you need the newest comment timestamp
-      for (let card of finalCards) {
-        card.newestCommentTimestamp = await getNewestCommentTimestamp(card.identifier)
-      }
-      finalCards.sort((a, b) =>
-        (b.newestCommentTimestamp || 0) - (a.newestCommentTimestamp || 0)
-      )
-    } else if (selectedSort === 'least-votes') {
-      await applyVoteSortingData(finalCards, /* ascending= */ true)
-    } else if (selectedSort === 'most-votes') {
-      await applyVoteSortingData(finalCards, /* ascending= */ false)
-    }
-    // else 'newest' => do nothing (already sorted newest-first by your process functions).
+    const sortedFinalCards = isARBoard
+      ? await sortCards(finalCards, selectedSort, "ar")
+      : await sortCards(finalCards, selectedSort, "minter")
+
     // Create the 'finalCardsArray' that includes the data, etc.
     let finalCardsArray = []
     let alreadyMinterCards = []
     cardsContainer.innerHTML = ''
-    for (const card of finalCards) {
+    for (const card of sortedFinalCards) {
       try {
         const skeletonHTML = createSkeletonCardHTML(card.identifier)
         cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
@@ -621,71 +605,6 @@ const verifyMinter = async (minterName) => {
   } catch (err) {
     console.warn("verifyMinter error:", err)
     return false
-  }
-}
-
-const applyVoteSortingData = async (cards, ascending = true) => {
-  const minterGroupMembers = await fetchMinterGroupMembers()
-  const minterAdmins = await fetchMinterGroupAdmins()
-
-  for (const card of cards) {
-    try {
-      const cardDataResponse = await qortalRequest({
-        action: "FETCH_QDN_RESOURCE",
-        name: card.name,
-        service: "BLOG_POST",
-        identifier: card.identifier,
-      })
-      if (!cardDataResponse || !cardDataResponse.poll) {
-        card._adminVotes = 0
-        card._adminYes = 0
-        card._minterVotes = 0
-        card._minterYes = 0
-        continue
-      }
-      const pollResults = await fetchPollResults(cardDataResponse.poll);
-      const { adminYes, adminNo, minterYes, minterNo } = await processPollData(
-        pollResults,
-        minterGroupMembers,
-        minterAdmins,
-        cardDataResponse.creator,
-        card.identifier
-      )
-      card._adminVotes = adminYes + adminNo
-      card._adminYes = adminYes
-      card._minterVotes = minterYes + minterNo
-      card._minterYes = minterYes
-    } catch (error) {
-      console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
-      card._adminVotes = 0
-      card._adminYes = 0
-      card._minterVotes = 0
-      card._minterYes = 0
-    }
-  }
-
-  if (ascending) {
-    // least votes first
-    cards.sort((a, b) => {
-      const diffAdminTotal = a._adminVotes - b._adminVotes
-      if (diffAdminTotal !== 0) return diffAdminTotal
-      const diffAdminYes = a._adminYes - b._adminYes
-      if (diffAdminYes !== 0) return diffAdminYes
-      const diffMinterTotal = a._minterVotes - b._minterVotes
-      if (diffMinterTotal !== 0) return diffMinterTotal
-      return a._minterYes - b._minterYes
-    })
-  } else {
-    // most votes first
-    cards.sort((a, b) => {
-      const diffAdminTotal = b._adminVotes - a._adminVotes
-      if (diffAdminTotal !== 0) return diffAdminTotal
-      const diffAdminYes = b._adminYes - a._adminYes
-      if (diffAdminYes !== 0) return diffAdminYes
-      const diffMinterTotal = b._minterVotes - a._minterVotes
-      if (diffMinterTotal !== 0) return diffMinterTotal
-      return b._minterYes - a._minterYes
-    })
   }
 }
 
@@ -1960,26 +1879,6 @@ const getMinterAvatar = async (minterName) => {
   } catch (error) {
     console.error('Error checking avatar availability:', error)
     return ''
-  }
-}
-
-const getNewestCommentTimestamp = async (cardIdentifier) => {
-  try {
-    // fetchCommentsForCard returns resources each with at least 'created' or 'updated'
-    const comments = await fetchCommentsForCard(cardIdentifier)
-    if (!comments || comments.length === 0) {
-	      // No comments => fallback to 0 (or card's own date, if you like)
-      return 0
-    }
-    // The newest can be determined by comparing 'updated' or 'created'
-    const newestTimestamp = comments.reduce((acc, c) => {
-      const cTime = c.updated || c.created || 0
-      return (cTime > acc) ? cTime : acc
-    }, 0)
-    return newestTimestamp
-  } catch (err) {
-    console.error('Failed to get newest comment timestamp:', err)
-    return 0
   }
 }
 

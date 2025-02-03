@@ -205,4 +205,139 @@ const fetchAllInviteTransactions = async () => {
     }
 }
   
+const sortCards = async (cardsArray, selectedSort, board) => {
+  // Default sort is by newest if none provided
+  if (!selectedSort) selectedSort = 'newest'
+  switch (selectedSort) {
+    case 'name':
+      // Sort by name
+      cardsArray.sort((a, b) => {
+        const nameA = (board === "admin")
+          ? (a.decryptedCardData?.minterName || '').toLowerCase()
+          : ((board === "ar")
+            ? (a.minterName?.toLowerCase() || '')
+            : (a.name?.toLowerCase() || '')
+          )
+        const nameB = (board === "admin")
+          ? (b.decryptedCardData?.minterName || '').toLowerCase()
+          : ((board === "ar")
+            ? (b.minterName?.toLowerCase() || '')
+            : (b.name?.toLowerCase() || '')
+          )
+        return nameA.localeCompare(nameB)
+      })
+      break
+    case 'recent-comments':
+      // Sort by newest comment timestamp
+      for (let card of cardsArray) {
+        const cardIdentifier = (board === "admin")
+          ? card.card.identifier
+          : card.identifier
+        card.newestCommentTimestamp = await getNewestCommentTimestamp(cardIdentifier, board)
+      }
+      cardsArray.sort((a, b) => {
+        return (b.newestCommentTimestamp || 0) - (a.newestCommentTimestamp || 0)
+      })
+      break
+    case 'least-votes':
+      await applyVoteSortingData(cardsArray, /* ascending= */ true)
+      break
+    case 'most-votes':
+      await applyVoteSortingData(cardsArray, /* ascending= */ false)
+      break
+    default:
+      // Sort by date
+      cardsArray.sort((a, b) => {
+        const timestampA = (board === "admin")
+          ? a.card.updated || a.card.created || 0
+          : a.updated || a.created || 0
+        const timestampB = (board === "admin")
+          ? b.card.updated || b.card.created || 0
+          : b.updated || b.created || 0
+        return timestampB - timestampA;
+      })
+      break
+    }
+    return cardsArray
+}
+  
+const getNewestCommentTimestamp = async (cardIdentifier, board) => {
+  try {
+    const comments = (board === "admin") ? await fetchEncryptedComments(cardIdentifier) : await fetchCommentsForCard(cardIdentifier)
+    if (!comments || comments.length === 0) {
+      return 0
+    }
+    const newestTimestamp = comments.reduce((acc, c) => {
+      const cTime = c.updated || c.created || 0
+      return (cTime > acc) ? cTime : acc
+    }, 0)
+    return newestTimestamp
+  } catch (err) {
+    console.error('Failed to get newest comment timestamp:', err)
+    return 0
+  }
+}
+  
+const applyVoteSortingData = async (cards, ascending = true) => {
+  const minterGroupMembers = await fetchMinterGroupMembers()
+  const minterAdmins = await fetchMinterGroupAdmins()
+  for (const card of cards) {
+    try {
+      const cardDataResponse = await qortalRequest({
+        action: "FETCH_QDN_RESOURCE",
+        name: card.name,
+        service: "BLOG_POST",
+        identifier: card.identifier,
+      })
+      if (!cardDataResponse || !cardDataResponse.poll) {
+        card._adminVotes = 0
+        card._adminYes = 0
+        card._minterVotes = 0
+        card._minterYes = 0
+        continue
+      }
+      const pollResults = await fetchPollResults(cardDataResponse.poll);
+      const { adminYes, adminNo, minterYes, minterNo } = await processPollData(
+        pollResults,
+        minterGroupMembers,
+        minterAdmins,
+        cardDataResponse.creator,
+        card.identifier
+      )
+      card._adminVotes = adminYes + adminNo
+      card._adminYes = adminYes
+      card._minterVotes = minterYes + minterNo
+      card._minterYes = minterYes
+    } catch (error) {
+      console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
+      card._adminVotes = 0
+      card._adminYes = 0
+      card._minterVotes = 0
+      card._minterYes = 0
+    }
+  }
+  if (ascending) {
+    // least votes first
+    cards.sort((a, b) => {
+      const diffAdminTotal = a._adminVotes - b._adminVotes
+      if (diffAdminTotal !== 0) return diffAdminTotal
+      const diffAdminYes = a._adminYes - b._adminYes
+      if (diffAdminYes !== 0) return diffAdminYes
+      const diffMinterTotal = a._minterVotes - b._minterVotes
+      if (diffMinterTotal !== 0) return diffMinterTotal
+      return a._minterYes - b._minterYes
+    })
+  } else {
+    // most votes first
+    cards.sort((a, b) => {
+      const diffAdminTotal = b._adminVotes - a._adminVotes
+      if (diffAdminTotal !== 0) return diffAdminTotal
+      const diffAdminYes = b._adminYes - a._adminYes
+      if (diffAdminYes !== 0) return diffAdminYes
+      const diffMinterTotal = b._minterVotes - a._minterVotes
+      if (diffMinterTotal !== 0) return diffMinterTotal
+      return b._minterYes - a._minterYes
+    })
+  }
+}
   

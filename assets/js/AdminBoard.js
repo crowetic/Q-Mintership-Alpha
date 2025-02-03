@@ -380,123 +380,11 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
       selectedSort = sortSelect.value
     }
 
-    if (selectedSort === 'name') {
-	      // Sort alphabetically by the minter's name
-      finalCards.sort((a, b) => {
-        const nameA = a.decryptedCardData.minterName?.toLowerCase() || ''
-        const nameB = b.decryptedCardData.minterName?.toLowerCase() || ''
-        return nameA.localeCompare(nameB)
-      })
-    } else if (selectedSort === 'recent-comments') {
-	      // We need each card's newest comment timestamp for sorting
-      for (let card of finalCards) {
-        card.newestCommentTimestamp = await getNewestAdminCommentTimestamp(card.card.identifier)
-      }
-      // Then sort descending by newest comment
-      finalCards.sort((a, b) =>
-        (b.newestCommentTimestamp || 0) - (a.newestCommentTimestamp || 0)
-      )
-    } else if (selectedSort === 'least-votes') {
-      // TODO: Add the logic to sort by LEAST total ADMIN votes, then totalYesWeight
-      const minterGroupMembers = await fetchMinterGroupMembers()
-      const minterAdmins = await fetchMinterGroupAdmins()
-      for (const finalCard of finalCards) {
-        try {
-          const pollName = finalCard.decryptedCardData.poll
-          // If card or poll is missing, default to zero
-          if (!pollName) {
-            finalCard._adminTotalVotes = 0
-            finalCard._yesWeight = 0
-            continue
-          }
-          const pollResults = await fetchPollResults(pollName)
-          if (!pollResults || pollResults.error) {
-            finalCard._adminTotalVotes = 0
-            finalCard._yesWeight = 0
-            continue
-          }
-          // Pull only the adminYes/adminNo/totalYesWeight from processPollData
-          const {
-            adminYes,
-            adminNo,
-            totalYesWeight
-          } = await processPollData(
-            pollResults,
-            minterGroupMembers,
-            minterAdmins,
-            finalCard.decryptedCardData.creator,
-            finalCard.card.identifier
-          )
-          finalCard._adminTotalVotes = adminYes + adminNo
-          finalCard._yesWeight = totalYesWeight
-        } catch (error) {
-          console.warn(`Error fetching or processing poll for card ${finalCard.card.identifier}:`, error)
-          finalCard._adminTotalVotes = 0
-          finalCard._yesWeight = 0
-        }
-      }
-      // Sort ascending by (adminYes + adminNo), then descending by totalYesWeight
-      finalCards.sort((a, b) => {
-        const diffAdminTotal = a._adminTotalVotes - b._adminTotalVotes
-        if (diffAdminTotal !== 0) return diffAdminTotal
-        // If there's a tie, show the card with higher yesWeight first
-        return b._yesWeight - a._yesWeight
-      })
-    } else if (selectedSort === 'most-votes') {
-      // TODO: Add the logic to sort by MOST total ADMIN votes, then totalYesWeight
-      const minterGroupMembers = await fetchMinterGroupMembers()
-      const minterAdmins = await fetchMinterGroupAdmins()
-      for (const finalCard of finalCards) {
-        try {
-          const pollName = finalCard.decryptedCardData.poll
-          if (!pollName) {
-            finalCard._adminTotalVotes = 0
-            finalCard._yesWeight = 0
-            continue
-          }
-          const pollResults = await fetchPollResults(pollName)
-          if (!pollResults || pollResults.error) {
-            finalCard._adminTotalVotes = 0
-            finalCard._yesWeight = 0
-            continue
-          }
-          const {
-            adminYes,
-            adminNo,
-            totalYesWeight
-          } = await processPollData(
-            pollResults,
-            minterGroupMembers,
-            minterAdmins,
-            finalCard.decryptedCardData.creator,
-            finalCard.card.identifier
-          )
-          finalCard._adminTotalVotes = adminYes + adminNo
-          finalCard._yesWeight = totalYesWeight
-        } catch (error) {
-          console.warn(`Error fetching or processing poll for card ${finalCard.card.identifier}:`, error)
-          finalCard._adminTotalVotes = 0
-          finalCard._yesWeight = 0
-        }
-      }
-      // Sort descending by (adminYes + adminNo), then descending by totalYesWeight
-      finalCards.sort((a, b) => {
-        const diffAdminTotal = b._adminTotalVotes - a._adminTotalVotes
-        if (diffAdminTotal !== 0) return diffAdminTotal
-        return b._yesWeight - a._yesWeight
-      })
-    } else {
-      // Sort cards by timestamp (most recent first)
-      finalCards.sort((a, b) => {
-        const timestampA = a.card.updated || a.card.created || 0
-        const timestampB = b.card.updated || b.card.created || 0
-        return timestampB - timestampA;
-      })
-    }
+    const sortedFinalCards = await sortCards(finalCards, selectedSort, "admin")
 
     encryptedCardsContainer.innerHTML = ""
 
-    const finalVisualFilterCards = finalCards.filter(({card}) => {
+    const finalVisualFilterCards = sortedFinalCards.filter(({card}) => {
       const showKickedBanned = document.getElementById('admin-show-kicked-banned-checkbox')?.checked ?? false
       const showHiddenAdminCards = document.getElementById('admin-show-hidden-checkbox')?.checked ?? false
 
@@ -1193,23 +1081,6 @@ const handleBanMinter = async (minterName) => {
   } catch (error) {
     console.error("Error removing minter:", error)
     alert(`Error ${error}. Please try again.`)
-  }
-}
-
-const getNewestAdminCommentTimestamp = async (cardIdentifier) => {
-  try {
-    const comments = await fetchEncryptedComments(cardIdentifier)
-    if (!comments || comments.length === 0) {
-      return 0
-    }
-    const newestTimestamp = comments.reduce((acc, comment) => {
-      const cTime = comment.updated || comment.created || 0
-      return cTime > acc ? cTime : acc
-    }, 0)
-    return newestTimestamp
-  } catch (err) {
-    console.error('Failed to get newest comment timestamp:', err)
-    return 0
   }
 }
 
