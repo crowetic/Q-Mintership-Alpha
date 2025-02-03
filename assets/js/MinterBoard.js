@@ -1647,14 +1647,15 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     getNameFromAddress
   )
 
-  if (transactionType === "GROUP_INVITE" && isSomeTypaAdmin) {
+  if (transactionType === "GROUP_INVITE") {
     const approvalButtonHtml = `
       <div style="display: flex; flex-direction: column; margin-top: 1em;">
         <p style="color: rgb(181, 214, 100);">
           Existing ${transactionType} Approvals: ${uniqueApprovalCount}
         </p>
         ${tableHtml}
-        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+        ${isSomeTypaAdmin ? `
+         <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
           <button
             style="
               padding: 8px;
@@ -1671,7 +1672,8 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
           >
             Approve Invite Tx
           </button>
-        </div>
+         </div>
+        ` : ''}
       </div>
     `
     return approvalButtonHtml
@@ -1744,7 +1746,8 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
           Existing ${transactionType} Approvals: ${uniqueApprovalCount}
         </p>
         ${tableHtml}
-        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+        ${isSomeTypaAdmin ? `
+         <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
           <button
             style="
               padding: 8px;
@@ -1761,7 +1764,8 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
           >
             Approve Add-Admin Tx
           </button>
-        </div>
+         </div>
+        ` : ''}
       </div>
     `
     return approvalButtonHtml
@@ -1774,7 +1778,8 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
           Existing ${transactionType} Approvals: ${uniqueApprovalCount}
         </p>
         ${tableHtml}
-        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+        ${isSomeTypaAdmin ? `
+         <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
           <button
             style="
               padding: 8px;
@@ -1791,7 +1796,8 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
           >
             Approve Remove-Admin Tx
           </button>
-        </div>
+         </div>
+        ` : ''}
       </div>
     `
     return approvalButtonHtml
