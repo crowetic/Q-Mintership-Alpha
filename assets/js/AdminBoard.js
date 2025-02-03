@@ -1303,9 +1303,9 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
     showRemoveHtml = removeActionsHtml
 
     if (userVote === 0) {
-      cardColorCode = "rgba(1, 65, 39, 0.41)"; // or any green you want
+      cardColorCode = "rgba(1, 128, 20, 0.35)"; // or any green you want
     } else if (userVote === 1) {
-      cardColorCode = "rgba(55, 12, 12, 0.61)"; // or any red you want
+      cardColorCode = "rgba(124, 6, 6, 0.45)"; // or any red you want
     }
 
     const confirmedKick = finalKickTxs.some(
