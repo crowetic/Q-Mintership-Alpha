@@ -140,26 +140,16 @@ const loadMinterBoardPage = async () => {
   })
 
   document.getElementById("time-range-select").addEventListener("change", async () => {
-    // Re-load the cards whenever user chooses a new sort option.
-    await loadCards(minterCardIdentifierPrefix)
+    // Only re-load the cards whenever user presses the refresh button.
   })
 
   document.getElementById("sort-select").addEventListener("change", async () => {
-    // Re-load the cards whenever user chooses a new sort option.
-    await loadCards(minterCardIdentifierPrefix)
+    // Only re-load the cards whenever user presses the refresh button.
   })
 
-  const showExistingCardsCheckbox = document.getElementById('show-existing-checkbox')
-  if (showExistingCardsCheckbox) {
-    showExistingCardsCheckbox.addEventListener('change', async (event) => {
-      await loadCards(minterCardIdentifierPrefix)
-    })
-  }
-
   await featureTriggerCheck()
-  await loadCards(minterCardIdentifierPrefix)
+  // Only load the cards whenever user presses the refresh button.
 }
-
 
 const extractMinterCardsMinterName = async (cardIdentifier) => {
   // Ensure the identifier starts with the prefix

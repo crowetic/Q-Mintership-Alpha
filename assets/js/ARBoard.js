@@ -124,26 +124,18 @@ const loadAddRemoveAdminPage = async () => {
         linksContainer.appendChild(newLinkInput)
     })
 
-    const timeRangeSelectCheckbox = document.getElementById('time-range-select')
-    if (timeRangeSelectCheckbox) {
-        timeRangeSelectCheckbox.addEventListener('change', async (event) => {
-        await loadCards(addRemoveIdentifierPrefix)
-        })
-    }
-
     document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
         event.preventDefault()
         await publishARCard(addRemoveIdentifierPrefix)
     })
 
     document.getElementById("sort-select").addEventListener("change", async () => {
-        // Re-load the cards whenever user chooses a new sort option.
-        await loadCards(addRemoveIdentifierPrefix)
+        // Only re-load the cards whenever user presses the refresh button.
     })
 
     await featureTriggerCheck()
     await displayExistingMinterAdmins()
-    await loadCards(addRemoveIdentifierPrefix)
+    // Only load the cards whenever user presses the refresh button.
     await fetchAllARTxData()
 }
 
