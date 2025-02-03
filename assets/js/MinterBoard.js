@@ -1826,8 +1826,18 @@ const buildApprovalTableHtml = async (approvalTxs, getNameFunc) => {
           : "(No registered name)"
 
       const dateStr = new Date(tx.timestamp).toLocaleString()
+      // Check whether this is the current user
+      const isCurrentUser = 
+        userState &&
+        userState.accountName &&
+        adminName && 
+        adminName.toLowerCase() === userState.accountName.toLowerCase();
+      // If it's the current user, highlight the row (change to any color/style you prefer)
+      const rowStyle = isCurrentUser
+        ? "background: rgba(178, 255, 89, 0.2);"  // light green highlight
+        : ""
       return `
-        <tr>
+        <tr style="${rowStyle}">
           <td style="border: 1px solid rgb(255, 255, 255); padding: 4px; color: dodgerblue">${displayName}</td>
           <td style="border: 1px solid rgb(255, 254, 254); padding: 4px;">${dateStr}</td>
         </tr>
