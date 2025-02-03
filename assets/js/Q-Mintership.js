@@ -644,6 +644,33 @@ const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImage
   }
 }
 
+const handleDeleteMessage = async (room, existingMessageIdentifier) => {
+  try {
+    const blankMessageObject = {
+      messageHtml: "<em>This post has been deleted.</em>",
+      hasAttachment: false,
+      attachments: [],
+      replyTo: null
+    }
+    const base64Message = btoa(JSON.stringify(blankMessageObject))
+    const service = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST"
+    const request = {
+      action: 'PUBLISH_QDN_RESOURCE',
+      name: userState.accountName,
+      service: service,
+      identifier: existingMessageIdentifier,
+      data64: base64Message
+    }
+    if (room === "admins") {
+      request.encrypt = true
+      request.publicKeys = adminPublicKeys
+    }
+    console.log("Deleting forum message...")
+    await qortalRequest(request)
+  } catch (err) {
+    console.error("Error deleting message:", err)
+  }
+}
 
 function clearInputs() {
   // Clear the file input elements and preview container
@@ -760,6 +787,7 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
     }
 
     handleReplyLogic(fetchMessages)
+    handleDeleteLogic(fetchMessages, room)
 
     await updatePaginationControls(room, limit)
   } catch (error) {
@@ -979,6 +1007,16 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
   const replyHtml = await buildReplyHtml(message, room)
   const attachmentHtml = await buildAttachmentHtml(message, room)
   const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`
+  let deleteButtonHtml = ''
+  if (message.name === userState.accountName) {
+    deleteButtonHtml = `
+      <button class="delete-button" 
+              data-message-identifier="${message.identifier}"
+              data-room="${room}">
+        Delete
+      </button>
+    `
+  }
 
   return `
     <div class="message-item" data-identifier="${message.identifier}">
@@ -995,7 +1033,10 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
       <div class="attachments-gallery">
         ${attachmentHtml}
       </div>
-      <button class="reply-button" data-message-identifier="${message.identifier}">Reply</button>
+      <div class="message-actions">
+        ${deleteButtonHtml}
+        <button class="reply-button" data-message-identifier="${message.identifier}">Reply</button>
+      </div>
     </div>
   `
 }
@@ -1142,6 +1183,24 @@ const handleReplyLogic = (fetchMessages) => {
       const repliedMessage = fetchMessages.find(m => m && m.identifier === replyToMessageIdentifier)
       if (repliedMessage) {
         showReplyPreview(repliedMessage)
+      }
+    })
+  })
+}
+
+const handleDeleteLogic = (fetchMessages, room) => {
+  // Only select buttons that do NOT already have a listener
+  const deleteButtons = document.querySelectorAll('.delete-button:not(.bound-delete)')
+  deleteButtons.forEach(button => {
+    button.classList.add('bound-delete')
+    button.addEventListener('click', async () => {
+      const messageId = button.dataset.messageIdentifier
+      const postRoom = button.dataset.room
+      const msg = fetchMessages.find(m => m && m.identifier === messageId)
+      if (msg) {
+        const confirmed = confirm("Are you sure you want to delete this post?")
+        if (!confirmed) return
+        await handleDeleteMessage(postRoom, messageId)
       }
     })
   })
