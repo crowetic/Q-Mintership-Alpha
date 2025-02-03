@@ -37,6 +37,7 @@ const loadMinterBoardPage = async () => {
         <option value="least-votes">Least Votes</option>
         <option value="most-votes">Most Votes</option>
       </select>
+      <span id="board-card-counter" style="font-size: 1rem; color: #999ccc; padding: 0.5em;"></span>
       <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
         <option value="0">Show All</option>
         <option value="1">Last 1 day</option>
@@ -44,6 +45,10 @@ const loadMinterBoardPage = async () => {
         <option value="30" selected>Last 30 days</option>
         <option value="90">Last 90 days</option>
       </select>
+      <label style="color:rgb(181, 181, 181); margin-left: 10px;">
+      <input type="checkbox" id="show-existing-checkbox" />
+      Show Existing Minter Cards (history)
+      </label>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
         <form id="publish-card-form" class="publish-card-form">
@@ -143,6 +148,13 @@ const loadMinterBoardPage = async () => {
     // Re-load the cards whenever user chooses a new sort option.
     await loadCards(minterCardIdentifierPrefix)
   })
+
+  const showExistingCardsCheckbox = document.getElementById('show-existing-checkbox')
+  if (showExistingCardsCheckbox) {
+    showExistingCardsCheckbox.addEventListener('change', async (event) => {
+      await loadCards(minterCardIdentifierPrefix)
+    })
+  }
 
   await featureTriggerCheck()
   await loadCards(minterCardIdentifierPrefix)
@@ -367,6 +379,12 @@ const loadCards = async (cardIdentifierPrefix) => {
   const cardsContainer = document.getElementById("cards-container")
   let isARBoard = false
   cardsContainer.innerHTML = "<p>Loading cards...</p>"
+  const counterSpan = document.getElementById("board-card-counter")
+
+  if (counterSpan) {
+    // Clear or show "Loading..."
+    counterSpan.textContent = "(loading...)"
+  }
 
   if (cardIdentifierPrefix.startsWith("QM-AR-card")) {
     isARBoard = true
@@ -374,6 +392,9 @@ const loadCards = async (cardIdentifierPrefix) => {
   }
   let afterTime = 0
   const timeRangeSelect = document.getElementById("time-range-select")
+
+  const showExistingCheckbox = document.getElementById("show-existing-checkbox")
+  const showExisting = showExistingCheckbox && showExistingCheckbox.checked
 
   if (timeRangeSelect) {
     const days = parseInt(timeRangeSelect.value, 10)
@@ -440,6 +461,7 @@ const loadCards = async (cardIdentifierPrefix) => {
     // else 'newest' => do nothing (already sorted newest-first by your process functions).
     // Create the 'finalCardsArray' that includes the data, etc.
     let finalCardsArray = []
+    let alreadyMinterCards = []
     cardsContainer.innerHTML = ''
     for (const card of finalCards) {
       try {
@@ -477,8 +499,14 @@ const loadCards = async (cardIdentifierPrefix) => {
         } else {
           const isAlreadyMinter = await verifyMinter(cardDataResponse.creator)
           if (isAlreadyMinter) {
-            console.warn(`card IS ALREADY a minter, NOT displaying following identifier on the MinterBoard: ${card.identifier}`)
+            console.warn(`card IS ALREADY a minter, adding to alreadyMinterCards array: ${card.identifier}`)
             removeSkeleton(card.identifier)
+            alreadyMinterCards.push({
+              ...card,
+              cardDataResponse,
+              pollPublisherAddress,
+              cardPublisherAddress
+            })
             continue
           }
         }
@@ -489,6 +517,12 @@ const loadCards = async (cardIdentifierPrefix) => {
           pollPublisherAddress,
           cardPublisherAddress,
         })
+        if (counterSpan) {
+          const displayedCount = finalCardsArray.length
+          const alreadyMinterCount = alreadyMinterCards.length
+          // If you want to show both
+          counterSpan.textContent = `(${displayedCount} cards, ${alreadyMinterCount} existingMinters)`
+        }
       } catch (err) {
         console.error(`Error preparing card ${card.identifier}`, err)
         removeSkeleton(card.identifier)
@@ -531,9 +565,39 @@ const loadCards = async (cardIdentifierPrefix) => {
       replaceSkeleton(cardObj.identifier, finalCardHTML)
     }
 
+    if (showExisting && alreadyMinterCards.length > 0) {
+      console.warn(`Rendering Existing Minter cards because user selected showExisting`)
+
+      for (const mintedCardObj of alreadyMinterCards) {
+        const skeletonHTML = createSkeletonCardHTML(mintedCardObj.identifier)
+        cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
+
+        const pollResults = await fetchPollResults(mintedCardObj.cardDataResponse.poll)
+        const commentCount = await countComments(mintedCardObj.identifier)
+        const cardUpdatedTime = mintedCardObj.updated || null
+        const bgColor = generateDarkPastelBackgroundBy(mintedCardObj.name)
+        const isExistingMinter = true
+
+        const finalCardHTML = await createCardHTML(
+          mintedCardObj.cardDataResponse,
+          pollResults,
+          mintedCardObj.identifier,
+          commentCount,
+          cardUpdatedTime,
+          bgColor,
+          mintedCardObj.cardPublisherAddress,
+          isExistingMinter
+        )
+        replaceSkeleton(mintedCardObj.identifier, finalCardHTML)
+      }
+    }
+
   } catch (error) {
     console.error("Error loading cards:", error)
     cardsContainer.innerHTML = "<p>Failed to load cards.</p>"
+    if (counterSpan) {
+      counterSpan.textContent = "(error loading)"
+    }
   }
 }
 
@@ -1193,6 +1257,7 @@ const toggleComments = async (cardIdentifier) => {
   const commentButton = document.getElementById(`comment-button-${cardIdentifier}`)
 
   if (!commentsSection || !commentButton) return
+  
   const count = commentButton.dataset.commentCount
   const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display)
 
@@ -1903,7 +1968,7 @@ const getNewestCommentTimestamp = async (cardIdentifier) => {
 }
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, address) => {
+const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, address, isExistingMinter=false) => {
   const { header, content, links, creator, creatorAddress, timestamp, poll } = cardData
   const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
   const avatarHtml = await getMinterAvatar(creator)
@@ -1919,7 +1984,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
   createModal('links')
   createModal('poll-details')
 
-  const inviteButtonHtml = await checkAndDisplayInviteButton(adminYes, creator, cardIdentifier)
+  const inviteButtonHtml = isExistingMinter ? "" : await checkAndDisplayInviteButton(adminYes, creator, cardIdentifier)
   let inviteHtmlAdd = (inviteButtonHtml) ? inviteButtonHtml : ''
 
   let finalBgColor = bgColor
@@ -1935,6 +2000,9 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
       finalBgColor = "rgba(1, 65, 39, 0.41)"; // or any green you want
     } else if (userVote === 1) {
       finalBgColor = "rgba(107, 3, 3, 0.3)"; // or any red you want
+    } else if (isExistingMinter){
+      finalBgColor = "rgb(99, 99, 99)"
+      invitedText = `<h4 style="color:rgb(135, 55, 16); margin-bottom: 0.5em;">EXISTING MINTER</h4>`
     } else if (hasMinterInvite) {
       // If so, override background color & add an "INVITED" label
       finalBgColor = "black"; 
