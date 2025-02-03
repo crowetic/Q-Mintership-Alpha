@@ -1828,7 +1828,7 @@ const buildApprovalTableHtml = async (approvalTxs, getNameFunc) => {
       const dateStr = new Date(tx.timestamp).toLocaleString()
       return `
         <tr>
-          <td style="border: 1px solid rgb(255, 255, 255); padding: 4px; color: #234565">${displayName}</td>
+          <td style="border: 1px solid rgb(255, 255, 255); padding: 4px; color: dodgerblue">${displayName}</td>
           <td style="border: 1px solid rgb(255, 254, 254); padding: 4px;">${dateStr}</td>
         </tr>
       `
