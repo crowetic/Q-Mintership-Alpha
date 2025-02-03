@@ -78,28 +78,28 @@ document.addEventListener("DOMContentLoaded", async () => {
   mintershipForumLinks.forEach(link => {
     link.addEventListener('click', async (event) => {
       event.preventDefault()
-      if (!userState.isLoggedIn) {
-        await login()
-      }
-      await loadForumPage();
+      await loadForumPage()
       loadRoomContent("general")
       startPollingForNewMessages()
       createScrollToTopButton()
+      if (!userState.isLoggedIn) {
+        await login()
+      }
     })
   })
 
   const minterBoardLinks = document.querySelectorAll('a[href="MINTER-BOARD"], a[href="MINTERS"]')
   minterBoardLinks.forEach(link => {
     link.addEventListener("click", async (event) => {
-      event.preventDefault();
-      if (!userState.isLoggedIn) {
-        await login()
-      }
+      event.preventDefault()
       if (typeof loadMinterBoardPage === "undefined") {
         console.log("loadMinterBoardPage not found, loading script dynamically...")
         await loadScript("./assets/js/MinterBoard.js")
       }
       await loadMinterBoardPage()
+      if (!userState.isLoggedIn) {
+        await login()
+      }
     })
   })
 
@@ -107,15 +107,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   addRemoveAdminLinks.forEach(link => {
     link.addEventListener('click', async (event) => {
       event.preventDefault()
-      // Possibly require user to login if not logged
-      if (!userState.isLoggedIn) {
-        await login()
-      }
       if (typeof loadMinterBoardPage === "undefined") {
         console.log("loadMinterBoardPage not found, loading script dynamically...")
         await loadScript("./assets/js/MinterBoard.js")
       }
       await loadAddRemoveAdminPage()
+      if (!userState.isLoggedIn) {
+        await login()
+      }
     })
   })
     
@@ -240,7 +239,10 @@ const loadForumPage = async () => {
     <div class="forum-main mbr-parallax-background cid-ttRnlSkg2R">
       <div class="forum-header" style="color: lightblue; display: flex; justify-content: center; align-items: center; padding: 10px;">
         <div class="user-info" style="border: 1px solid lightblue; padding: 5px; color: white; display: flex; align-items: center; justify-content: center;">
-          <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; margin-right: 10px;">
+          ${userState.isLoggedIn ? `
+            <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; margin-right: 10px;">
+            ` : ''
+          }
           <span>${userState.accountName || 'Guest'}</span>
         </div>
       </div>
