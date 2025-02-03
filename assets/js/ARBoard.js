@@ -59,6 +59,13 @@ const loadAddRemoveAdminPage = async () => {
         <div id="existing-proposals-section" class="proposals-section" style="margin-top: 3em; display: flex; flex-direction: column; justify-content: center; align-items: center;">
             <h3 style="color: #ddd;">Existing Promotion/Demotion Proposals</h3>
             <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Proposal Cards</button>
+            <select id="sort-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color:white; background-color: black;">
+                <option value="newest" selected>Sort by Date</option>
+                <option value="name">Sort by Name</option>
+                <option value="recent-comments">Newest Comments</option>
+                <option value="least-votes">Least Votes</option>
+                <option value="most-votes">Most Votes</option>
+            </select>
             <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
                 <option value="0">Show All</option>
                 <option value="1">Last 1 day</option>
@@ -128,6 +135,12 @@ const loadAddRemoveAdminPage = async () => {
         event.preventDefault()
         await publishARCard(addRemoveIdentifierPrefix)
     })
+
+    document.getElementById("sort-select").addEventListener("change", async () => {
+        // Re-load the cards whenever user chooses a new sort option.
+        await loadCards(addRemoveIdentifierPrefix)
+    })
+
     await featureTriggerCheck()
     await loadCards(addRemoveIdentifierPrefix)
     await displayExistingMinterAdmins()
