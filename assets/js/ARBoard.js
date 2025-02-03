@@ -142,8 +142,8 @@ const loadAddRemoveAdminPage = async () => {
     })
 
     await featureTriggerCheck()
-    await loadCards(addRemoveIdentifierPrefix)
     await displayExistingMinterAdmins()
+    await loadCards(addRemoveIdentifierPrefix)
     await fetchAllARTxData()
 }
 
