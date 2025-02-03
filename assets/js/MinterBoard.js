@@ -1983,6 +1983,36 @@ const getNewestCommentTimestamp = async (cardIdentifier) => {
   }
 }
 
+const deleteCard = async (cardIdentifier) => {
+  try {
+    const confirmed = confirm("Are you sure you want to delete this card? This action cannot be undone.")
+    if (!confirmed) return
+    const blankData = {
+      header: "",
+      content: "",
+      links: [],
+      creator: userState.accountName,
+      timestamp: Date.now(),
+      poll: ""
+    }
+    let base64Data = await objectToBase64(blankData)
+    if (!base64Data) {
+      base64Data = btoa(JSON.stringify(blankData))
+    }
+    await qortalRequest({
+      action: "PUBLISH_QDN_RESOURCE",
+      name: userState.accountName,
+      service: "BLOG_POST",
+      identifier: cardIdentifier,
+      data64: base64Data,
+    })
+    alert("Your card has been effectively deleted.")
+  } catch (error) {
+    console.error("Error deleting Minter card:", error)
+    alert("Failed to delete the card. Check console for details.")
+  }
+}
+
 // Create the overall Minter Card HTML -----------------------------------------------
 const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, address, isExistingMinter=false) => {
   const { header, content, links, creator, creatorAddress, timestamp, poll } = cardData
@@ -2093,6 +2123,16 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
         <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>
+    ${creator === userState.accountName ? `
+      <div style="margin-top: 0.8em;">
+        <button
+          style="padding: 10px; background: darkred; color: white; border-radius: 4px; cursor: pointer;"
+          onclick="deleteCard('${cardIdentifier}')"
+        >
+          DELETE CARD
+        </button>
+      </div>
+    ` : ''}
     <div id="comments-section-${cardIdentifier}" class="comments-section" style="display: none; margin-top: 20px;">
       <div id="comments-container-${cardIdentifier}" class="comments-container"></div>
       <textarea id="new-comment-${cardIdentifier}" placeholder="Write a comment..." style="width: 100%; margin-top: 10px;"></textarea>

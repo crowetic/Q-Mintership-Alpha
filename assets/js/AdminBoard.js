@@ -1213,6 +1213,39 @@ const getNewestAdminCommentTimestamp = async (cardIdentifier) => {
   }
 }
 
+const deleteAdminCard = async (cardIdentifier) => {
+  try {
+    const confirmed = confirm("Are you sure you want to delete this card? This action cannot be undone.")
+    if (!confirmed) return
+    const blankData = {
+      header: "",
+      content: "",
+      links: [],
+      creator: userState.accountName,
+      timestamp: Date.now(),
+      poll: ""
+    }
+    let base64Data = await objectToBase64(blankData)
+    if (!base64Data) {
+      base64Data = btoa(JSON.stringify(blankData))
+    }
+    const verifiedAdminPublicKeys = await fetchAdminGroupsMembersPublicKeys()
+    await qortalRequest({
+      action: "PUBLISH_QDN_RESOURCE",
+      name: userState.accountName,
+      service: "MAIL_PRIVATE",
+      identifier: cardIdentifier,
+      data64: base64Data,
+      encrypt: true,
+      publicKeys: verifiedAdminPublicKeys
+    })
+    alert("Your card has been effectively deleted.")
+  } catch (error) {
+    console.error("Error deleting Admin card:", error)
+    alert("Failed to delete the card. Check console for details.")
+  }
+}
+
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
   const { minterName, minterAddress = '', header, content, links, creator, timestamp, poll, topicMode } = cardData
@@ -1398,6 +1431,16 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
         <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>
+    ${creator === userState.accountName ? `
+      <div style="margin-top: 0.8em;">
+        <button
+          style="padding: 10px; background: darkred; color: white; border-radius: 4px; cursor: pointer;"
+          onclick="deleteAdminCard('${cardIdentifier}')"
+        >
+          DELETE CARD
+        </button>
+      </div>
+    ` : ''}
     <div id="comments-section-${cardIdentifier}" class="comments-section" style="display: none; margin-top: 20px;">
       <div id="comments-container-${cardIdentifier}" class="comments-container"></div>
       <textarea id="new-comment-${cardIdentifier}" placeholder="Input your comment..." style="width: 100%; margin-top: 10px;"></textarea>
