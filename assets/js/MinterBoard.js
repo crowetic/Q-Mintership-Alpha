@@ -378,7 +378,7 @@ const processARBoardCards = async (allValidCards) => {
 const loadCards = async (cardIdentifierPrefix) => {
   const cardsContainer = document.getElementById("cards-container")
   let isARBoard = false
-  cardsContainer.innerHTML = "<p>Loading cards...</p>"
+  cardsContainer.innerHTML = `<p style="color:white;">Loading cards...</p>`
   const counterSpan = document.getElementById("board-card-counter")
 
   if (counterSpan) {
