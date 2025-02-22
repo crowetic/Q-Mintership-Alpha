@@ -39,11 +39,13 @@ const loadMinterBoardPage = async () => {
       </select>
       <span id="board-card-counter" style="font-size: 1rem; color: #999ccc; padding: 0.5em;"></span>
       <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
-        <option value="0">Show All</option>
-        <option value="1">Last 1 day</option>
-        <option value="7">Last 7 days</option>
-        <option value="30" selected>Last 30 days</option>
-        <option value="90">Last 90 days</option>
+        <option value="0">All Creation Dates</option>
+        <option value="1">Last 1 Day</option>
+        <option value="7">Last 7 Days</option>
+        <option value="30">...Within 30 Days</option>
+        <option value="45" selected>Published Within Last 45 Days</option>
+        <option value="60">...Within 60 Days</option>
+        <option value="90">...Within 90 Days</option>
       </select>
       <label style="color:rgb(181, 181, 181); margin-left: 10px;">
       <input type="checkbox" id="show-existing-checkbox" />

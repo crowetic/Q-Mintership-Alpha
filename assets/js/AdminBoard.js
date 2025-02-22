@@ -84,12 +84,14 @@ const loadAdminBoardPage = async () => {
       <option value="most-votes">Most Votes</option>
     </select>
     <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
-        <option value="0">Show All</option>
-        <option value="1">Last 1 day</option>
-        <option value="7">Last 7 days</option>
-        <option value="30" selected>Last 30 days</option>
-        <option value="90">Last 90 days</option>
-      </select>
+      <option value="0">All Creation Dates</option>
+      <option value="1">Last 1 Day</option>
+      <option value="7">Last 7 Days</option>
+      <option value="30">...Within 30 Days</option>
+      <option value="45" selected>Published Within Last 45 Days</option>
+      <option value="60">...Within 60 Days</option>
+      <option value="90">...Within 90 Days</option>
+    </select>
     <div class="show-card-checkbox" style="margin-top: 1em;">
       <input type="checkbox" id="admin-show-hidden-checkbox" name="adminHidden" />
       <label for="admin-show-hidden-checkbox">Show User-Hidden Cards?</label>

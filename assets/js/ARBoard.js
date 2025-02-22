@@ -60,11 +60,13 @@ const loadAddRemoveAdminPage = async () => {
             <h3 style="color: #ddd;">Existing Promotion/Demotion Proposals</h3>
             <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Proposal Cards</button>
             <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
-                <option value="0">Show All</option>
-                <option value="1">Last 1 day</option>
-                <option value="7">Last 7 days</option>
-                <option value="30" selected>Last 30 days</option>
-                <option value="90">Last 90 days</option>
+              <option value="0">All Creation Dates</option>
+              <option value="1">Last 1 Day</option>
+              <option value="7">Last 7 Days</option>
+              <option value="30">...Within 30 Days</option>
+              <option value="45" selected>Published Within Last 45 Days</option>
+              <option value="60">...Within 60 Days</option>
+              <option value="90">...Within 90 Days</option>
             </select>
         </div>
         <div id="cards-container" class="cards-container" style="margin-top: 1rem"">
