@@ -1652,10 +1652,8 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
   }
 }
 
-const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offset = 0) => {
-  // 1) Fetch all pending transactions
+const findPendingTxForAddress = async (address, txType, limit = 0, offset = 0) => {
   const pendingTxs = await searchPendingTransactions(limit, offset, false)
-  // if a txType is passed, return the results related to that type, if not, then return any pending tx of the potential types.
   let relevantTypes
   if (txType) {
     relevantTypes = new Set([txType])
@@ -1710,15 +1708,15 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     blockLimit: 0,
     txGroupId: 0 
   })
-  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType, 0, 0)
+  const pendingTxs = await findPendingTxForAddress(address, transactionType, 0, 0)
   let isSomeTypaAdmin = userState.isAdmin || userState.isMinterAdmin
   // If no pending transaction found, return null
-  if (!pendingApprovals || pendingApprovals.length === 0) {
-    console.warn("no pending approval transactions found, returning null...")
+  if (!pendingTxs || pendingTxs.length === 0) {
+    console.warn("no pending transactions found, returning null...")
     return null
   }
-  const txSig = pendingApprovals[0].signature
-  // Find the relevant signature. (First approval)
+  const txSig = pendingTxs[0].signature
+  // Find the relevant signature. (signature of the issued transaction pending.)
   const relevantApprovals = approvalSearchResults.filter(
     (approvalTx) => approvalTx.pendingSignature === txSig
   )

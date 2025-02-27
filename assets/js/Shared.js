@@ -196,13 +196,25 @@ const fetchAllInviteTransactions = async () => {
   
     const { finalTx: finalInviteTxs, pendingTx: pendingInviteTxs } = partitionTransactions(allInviteTx)
     
-    console.log('Final kickTxs:', finalInviteTxs)
-    console.log('Pending kickTxs:', pendingInviteTxs)
+    console.log('Final InviteTxs:', finalInviteTxs)
+    console.log('Pending InviteTxs:', pendingInviteTxs)
   
     return {
       finalInviteTxs,
       pendingInviteTxs,
     }
 }
+
+const findPendingApprovalsForTxSignature = async (txSignature, txType='GROUP_APPROVAL', limit=0, offset=0) => {
+  const pendingTxs = await searchPendingTransactions(limit, offset)
+  
+  // Filter only the relevant GROUP_APPROVAL TX referencing txSignature
+  const approvals = pendingTxs.filter(tx =>
+    tx.type === txType && tx.pendingSignature === txSignature
+  )
+  console.log(`approvals found:`,approvals)
+  return approvals
+}
+
   
   

@@ -1354,7 +1354,7 @@ const processTransaction = async (signedTransaction) => {
 
 // Create a group invite transaction. This will utilize a default timeToLive (which is how long the tx will be alive, not the time until it IS live...) of 10 days in seconds, as the legacy UI has a bug that doesn't display invites older than 10 days.
 // We will also default to the MINTER group for groupId, AFTER the GROUP_APPROVAL changes, the txGroupId will need to be set for tx that require approval.
-const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive, txGroupId, fee) => {
+const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive=0, txGroupId, fee) => {
 
     try {
         // Fetch account reference correctly

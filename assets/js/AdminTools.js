@@ -33,7 +33,7 @@ const loadMinterAdminToolsPage = async () => {
       <div id="tools-submenu" class="tools-submenu">
         <div class="tools-buttons" style="display: flex; gap: 1em; justify-content: center;">
           <button id="toggle-blocklist-button" class="publish-card-button">Add/Remove blockedUsers</button>
-          <button id="create-group-invite" class="publish-card-button">Create Pending Group Invite</button>
+          <button id="create-group-invite" class="publish-card-button" style="backgroundColor:rgb(82, 114, 145)">Create and Display Pending Group Invites</button>
         </div>
         
         <div id="tools-window" class="tools-window" style="margin-top: 2em;">
@@ -55,6 +55,30 @@ const loadMinterAdminToolsPage = async () => {
               <button id="blocklist-remove-button" class="publish-card-button">Remove</button>
             </div>
           </div>
+
+          <div id="invite-container" class="invite-form" style="display: none; flex-direction: column; padding: 0.75em; align-items: center; justify-content: center;">
+            
+            <!-- Existing pending invites display -->
+            <div id="pending-invites-display" class="pending-invites-display" style="margin-bottom: 1em;">
+              <!-- We will fill this dynamically with a list/table of pending invites -->
+            </div>
+
+            <!-- Input for name/address -->
+            <h3 style="margin-top: 0;">Manual Group Invite</h3>
+            <input
+              type="text"
+              id="invite-input"
+              class="invite-input"
+              placeholder="Enter name or address to invite"
+              style="margin-bottom: 1em;"
+            />
+
+            <!-- Button to create the invite transaction -->
+            <div class="invite-button-container publish-card-form">
+              <button id="invite-user-button" class="publish-card-button">Invite User</button>
+            </div>
+          </div>
+
           
         </div>
       </div>
@@ -63,10 +87,10 @@ const loadMinterAdminToolsPage = async () => {
 
     document.body.appendChild(mainContent)
   
-    addToolsPageEventListeners()
+    await addToolsPageEventListeners()
 }
   
-function addToolsPageEventListeners() {
+const addToolsPageEventListeners= async () => {
   document.getElementById("toggle-blocklist-button").addEventListener("click", async () => {
     const container = document.getElementById("blocklist-container")
     // toggle show/hide
@@ -116,6 +140,32 @@ function addToolsPageEventListeners() {
     alert(`"${nameToRemove}" removed from the block list (if it was present).`)
   })
 
+  document.getElementById("invite-user-button").addEventListener("click", async () => {
+    const inviteInput = document.getElementById("invite-input")
+    const nameOrAddress = inviteInput.value.trim()
+    if (!nameOrAddress) return
+  
+    try {
+      // We'll call some function handleManualInvite(nameOrAddress)
+      await handleManualInvite(nameOrAddress)    
+      inviteInput.value = ""
+  
+    } catch (err) {
+      console.error("Error inviting user:", err)
+      alert("Failed to invite user.")
+    }
+  })
+
+  document.getElementById("create-group-invite").addEventListener("click", async () => {
+    const inviteContainer = document.getElementById("invite-container")
+    // Toggle display
+    inviteContainer.style.display = (inviteContainer.style.display === "none" ? "flex" : "none")
+    // If showing, load the pending invites
+    if (inviteContainer.style.display === "flex") {
+      const pendingInvites = await fetchPendingInvites()
+      await displayPendingInviteDetails(pendingInvites)
+    }
+  })
 }
 
 const displayBlockList = (blockedNames) => {
@@ -129,6 +179,141 @@ const displayBlockList = (blockedNames) => {
       ${blockedNames.map(name => `<li>${name}</li>`).join("")}
     </ul>
   `
+}
+
+const fetchPendingInvites = async () => {
+  try {
+    const { finalInviteTxs, pendingInviteTxs } = await fetchAllInviteTransactions()
+    return pendingInviteTxs
+  } catch (err) {
+    console.error("Error fetching pending invites:", err)
+    return []
+  }
+}
+
+const handleManualInvite = async (nameOrAddress) => {
+  const addressInfo = await getAddressInfo(nameOrAddress)
+  let address = addressInfo.address
+  if (addressInfo && address) {
+    console.log(`address is ${address}`)
+  } else {
+    // it might be a Qortal name => getNameInfo
+    const nameData = await getNameInfo(nameOrAddress)
+    if (!nameData || !nameData.owner) {
+      throw new Error(`Cannot find valid address for ${nameOrAddress}`)
+    }
+    address = nameData.owner
+  }
+
+  const adminPublicKey = await getPublicKeyByName(userState.accountName)
+  const timeToLive = 864000 // e.g. 10 days in seconds
+  const fee = 0.01
+  let txGroupId = 694
+
+  // build the raw invite transaction
+  const rawInviteTransaction = await createGroupInviteTransaction(
+    address,
+    adminPublicKey,
+    694,
+    address,
+    timeToLive,
+    txGroupId,
+    fee
+  )
+
+  // sign
+  const signedTransaction = await qortalRequest({
+    action: "SIGN_TRANSACTION",
+    unsignedBytes: rawInviteTransaction
+  })
+  if (!signedTransaction) {
+    throw new Error("SIGN_TRANSACTION returned null. Possibly user canceled or an older UI?")
+  }
+
+  // process
+  const processResponse = await processTransaction(signedTransaction)
+  if (!processResponse) {
+    throw new Error("Failed to process transaction. Possibly canceled or error from Qortal Core.")
+  }
+
+  alert(`Invite transaction submitted for ${nameOrAddress}. Wait for confirmation.`)
+}
+
+
+const displayPendingInviteDetails = async (pendingInvites) => {
+  const invitesContainer = document.getElementById('pending-invites-display')
+  if (!pendingInvites || pendingInvites.length === 0) {
+    invitesContainer.innerHTML = "<p>No pending invites found.</p>"
+    return
+  }
+
+  let html = `<h4>Current Pending Invites:</h4><div class="pending-invites-list">`
+
+  for (const inviteTx of pendingInvites) {
+    const inviteeAddress = inviteTx.invitee 
+    const dateStr = new Date(inviteTx.timestamp).toLocaleString()
+    let inviteeName = ""
+    const txSig = inviteTx.signature
+    const creatorName = await getNameFromAddress(inviteTx.creatorAddress) 
+    if (!creatorName) {
+      creatorName = inviteTx.creatorAddress
+    }
+
+    try {
+      // fetch the name from address, if it fails we keep it blank or fallback to the address
+      inviteeName = await getNameFromAddress(inviteeAddress)
+      if (!inviteeName || inviteeName === inviteeAddress) {
+        inviteeName = inviteeAddress // fallback
+      }
+    } catch (err) {
+      inviteeName = inviteeAddress // fallback if getName fails
+    }
+
+    const approvalSearchResults = await searchTransactions({
+      txTypes: ['GROUP_APPROVAL'],
+      confirmationStatus: 'CONFIRMED',
+      limit: 0,
+      reverse: false,
+      offset: 0,
+      startBlock: 1990000,
+      blockLimit: 0,
+      txGroupId: 0 
+    })
+
+    const approvals = approvalSearchResults.filter(
+      (approvalTx) => approvalTx.pendingSignature === txSig
+    )
+    
+    const { tableHtml, approvalCount } = await buildApprovalTableHtml(approvals, getNameFromAddress)
+    const finalTable = approvals.length > 0 ? tableHtml : "<p>No Approvals Found</p>"
+    
+    html += `
+      <div class="invite-item">
+        <div class="invite-top-row">
+          <span><strong>Invite Tx</strong>:<p style="color:lightblue"> ${inviteTx.signature.slice(0, 8)}...</p></span>
+          <span> <strong>Invitee</strong>:<p style="color:lightblue"> ${inviteeName}</p></span>
+          <span> <strong>Date</strong>:<p style="color:lightblue"> ${dateStr}</p></span>
+          <span> <strong>CreatorName</strong>:<p style="color:lightblue"> ${creatorName}</p></span>
+          <span> <strong>Total Approvals</strong>:<p style="color:lightblue"> ${approvalCount}</p></span>
+          
+        </div>
+        <!-- Next line for approvals -->
+        <div class="invite-approvals">
+          <strong>Existing Approvals:</strong>
+          ${finalTable}
+        </div>
+        <button
+            class="approve-invite-list-button"
+            onclick="handleGroupApproval('${inviteTx.signature}')"
+          >
+            Approve Invite
+          </button>
+      </div>
+    `
+  }
+
+  html += "</div>"
+  invitesContainer.innerHTML = html
 }
 
 
