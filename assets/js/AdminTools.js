@@ -284,7 +284,7 @@ const displayPendingInviteDetails = async (pendingInvites) => {
       (approvalTx) => approvalTx.pendingSignature === txSig
     )
     
-    const { tableHtml, approvalCount } = await buildApprovalTableHtml(approvals, getNameFromAddress)
+    const { tableHtml, approvalCount = approvals.length } = await buildApprovalTableHtml(approvals, getNameFromAddress)
     const finalTable = approvals.length > 0 ? tableHtml : "<p>No Approvals Found</p>"
     
     html += `

@@ -6,6 +6,11 @@ let baseUrl = ''
 let isOutsideOfUiDevelopment = false
 let nullAddress = 'QdSnUy6sUiEnaN87dWmE92g1uQjrvPgrWG'
 
+// Caching to improve performance
+const nameInfoCache = new Map();  // name -> nameInfo
+const addressInfoCache = new Map(); // address -> addressInfo
+const pollResultsCache = new Map(); // pollName -> pollResults
+
 if (typeof qortalRequest === 'function') {
     console.log('qortalRequest is available as a function. Setting development mode to false and baseUrl to nothing.')
     isOutsideOfUiDevelopment = false
@@ -223,6 +228,13 @@ const getUserAddress = async () => {
     }
 }
 
+const getAddressInfoCached = async (address) => {
+    if (addressInfoCache.has(address)) return addressInfoCache.get(address)
+    const result = await getAddressInfo(address)
+    addressInfoCache.set(address, result)
+    return result
+}
+
 const getAddressInfo = async (address) => {
     const qortalAddressPattern = /^Q[A-Za-z0-9]{33}$/  // Q + 33 almum = 34 total length
 
@@ -253,6 +265,19 @@ const getAddressInfo = async (address) => {
         throw error
     }
 }
+
+const nameToAddressCache = new Map()
+const fetchOwnerAddressFromNameCached = async (name) => {
+    if (nameToAddressCache.has(name)) {
+        return nameToAddressCache.get(name)
+      }
+      
+      const address = await fetchOwnerAddressFromName(name)
+      
+      nameToAddressCache.set(name, address)
+      return address
+}
+
 
 const fetchOwnerAddressFromName = async (name) => {
     console.log('fetchOwnerAddressFromName called')
@@ -332,6 +357,15 @@ const verifyAddressIsAdmin = async (address) => {
         throw error
       }
 }
+
+const getNameInfoCached = async (name) => {
+    if (nameInfoCache.has(name)) {
+      return nameInfoCache.get(name)
+    }
+    const result = await getNameInfo(name)
+    nameInfoCache.set(name, result)
+    return result
+  }
      
 const getNameInfo = async (name) => {
     console.log('getNameInfo called')
@@ -1239,6 +1273,20 @@ const getProductDetails = async (service, name, identifier) => {
 
 // Qortal poll-related calls ----------------------------------------------------------------------
 
+const pollOwnerAddrCache = new Map()
+
+const getPollOwnerAddressCached = async (pollName) => {
+  if (pollOwnerAddrCache.has(pollName)) {
+    return pollOwnerAddrCache.get(pollName)
+  }
+
+  const ownerAddress = await getPollOwnerAddress(pollName)
+  
+  // Store in cache
+  pollOwnerAddrCache.set(pollName, ownerAddress)
+  return ownerAddress
+}
+
 const getPollOwnerAddress = async (pollName) => {
     try {
         const response = await fetch(`${baseUrl}/polls/${pollName}`, {
@@ -1265,6 +1313,15 @@ const getPollPublisherPublicKey = async (pollName) => {
         console.error(`Error fetching poll results for ${pollName}:`, error)
         return null
       }
+}
+
+const fetchPollResultsCached = async (pollName) => {
+  if (pollResultsCache.has(pollName)) {
+    return pollResultsCache.get(pollName)
+  }
+  const result = await fetchPollResults(pollName)
+  pollResultsCache.set(pollName, result)
+  return result
 }
 
 const fetchPollResults = async (pollName) => {
