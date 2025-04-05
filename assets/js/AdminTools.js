@@ -18,22 +18,23 @@ const loadMinterAdminToolsPage = async () => {
     mainContent.innerHTML = `
     <div class="tools-main mbr-parallax-background cid-ttRnlSkg2R">
       <div class="tools-header" style="color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px;">
-        <div><h1 style="font-size: 50px; margin: 0;">Admin Tools</h1></div>
+        
         <div class="user-info" style="border: 1px solid lightblue; padding: 5px; color: lightblue; display: flex; align-items: center; justify-content: center;">
           <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; margin-right: 10px;">
-          <span>${userState.accountName || 'Guest'}</span>
+          <span>${userState.accountName || 'Guest'}'s Admin Tools</span>
         </div>
-        <div><h2>Welcome to Admin Tools</h2></div>
+        
         <div>
-          <p>On this page you will find admin functionality for the Q-Mintership App. Including the 'blockList' for blocking comments from certain names, and manual creation of invite transactions.</p>
-          <p>More features will be added as time goes on. This is the start of the functionality here.</p>
+          <p style="color:rgba(80, 9, 9, 0.63)"></p>
+          <p style="color:rgb(82, 114, 145)"> The approve feature allows invite by name, and shows ALL existing approvals ongoing, whether initiated on this page manually or not. Allowing for easy displaying and approving without loading the MinterBoard and scrolling through cards. </p>
+          <p style="font-size: 0.85rem"> This is NOT a substitute for the AdminBoard, as obviously no data regarding the account is published here. However, if you have already read the data there, and wish to see it easily in one place, here, that is fine. It can also obviously be utilized to manually invite users that require such actions to be taken, however, this action as well should be extremely limited in usage, and not leveraged without extensive provided rationale.</p>
         </div>
       </div>
       
       <div id="tools-submenu" class="tools-submenu">
         <div class="tools-buttons" style="display: flex; gap: 1em; justify-content: center;">
-          <button id="toggle-blocklist-button" class="publish-card-button">Add/Remove blockedUsers</button>
-          <button id="create-group-invite" class="publish-card-button" style="backgroundColor:rgb(82, 114, 145)">Create and Display Pending Group Invites</button>
+          <button id="toggle-blocklist-button" style="background-color:rgba(80, 9, 9, 0.63)"  class="publish-card-button">Add/Remove blockedUsers</button>
+          <button id="create-group-invite" class="publish-card-button" style="background-color:rgb(82, 114, 145)">Create and Display Pending Group Invites</button>
         </div>
         
         <div id="tools-window" class="tools-window" style="margin-top: 2em;">

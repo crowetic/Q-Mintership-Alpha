@@ -97,6 +97,7 @@ const loadAddRemoveAdminPage = async () => {
     document.getElementById("refresh-cards-button").addEventListener("click", async () => {
         const cardsContainer = document.getElementById("cards-container")
         cardsContainer.innerHTML = "<p>Refreshing cards...</p>"
+        await initializeCachedGroups()
         await loadCards(addRemoveIdentifierPrefix)
     })
 
@@ -168,51 +169,63 @@ const fetchAllARTxData = async () => {
         txGroupId: 694,
       })
 
-    const { finalAddTxs, pendingAddTxs } = partitionAddTransactions(allAddTxs)
-    const { finalRemTxs, pendingRemTxs } = partitionRemoveTransactions(allRemTxs)
+    const { finalAddTxs, pendingAddTxs, expiredAddTxs } = partitionAddTransactions(allAddTxs)
+    const { finalRemTxs, pendingRemTxs, expiredRemTxs } = partitionRemoveTransactions(allRemTxs)
   
     // We are going to keep all transactions in order to filter more accurately for display purposes.
-    console.log('Final addAdminTxs:', finalAddTxs);
-    console.log('Pending addAdminTxs:', pendingAddTxs);
-    console.log('Final remAdminTxs:', finalRemTxs);
-    console.log('Pending remAdminTxs:', pendingRemTxs);
+    console.log('Final addAdminTxs:', finalAddTxs)
+    console.log('Pending addAdminTxs:', pendingAddTxs)
+    console.log('expired addAdminTxs', expiredAddTxs)
+    console.log('Final remAdminTxs:', finalRemTxs)
+    console.log('Pending remAdminTxs:', pendingRemTxs)
+    console.log('expired remAdminTxs', expiredRemTxs)
   
     return {
       finalAddTxs,
       pendingAddTxs,
+      expiredAddTxs,
       finalRemTxs,
       pendingRemTxs,
+      expiredRemTxs
     }
 }
   
 const partitionAddTransactions = (rawTransactions) => {
-    const finalAddTxs = []
-    const pendingAddTxs = []
-  
-    for (const tx of rawTransactions) {
-      if (tx.approvalStatus === 'PENDING') {
-        pendingAddTxs.push(tx)
-      } else {
-        finalAddTxs.push(tx)
-      }
+  const finalAddTxs = []
+  const pendingAddTxs = []
+  const expiredAddTxs = []
+
+  for (const tx of rawTransactions) {
+    if (tx.approvalStatus === 'PENDING') {
+      pendingAddTxs.push(tx)
     }
-  
-    return { finalAddTxs, pendingAddTxs };
+    else if (tx.approvalStatus === 'EXPIRED'){
+      expiredAddTxs.push(tx)
+    } else {
+      finalAddTxs.push(tx)
+    }
+  }
+
+  return { finalAddTxs, pendingAddTxs, expiredAddTxs };
 }
   
 const partitionRemoveTransactions = (rawTransactions) => {
-    const finalRemTxs = []
-    const pendingRemTxs = []
+  const finalRemTxs = []
+  const pendingRemTxs = []
+  const expiredRemTxs = []
 
-    for (const tx of rawTransactions) {
-        if (tx.approvalStatus === 'PENDING') {
+  for (const tx of rawTransactions) {
+      if (tx.approvalStatus === 'PENDING') {
         pendingRemTxs.push(tx)
-        } else {
+      }
+      else if (tx.approvalStatus === 'EXPIRED'){
+        expiredRemTxs.push(tx)
+      } else {
         finalRemTxs.push(tx)
-        }
-    }
+      }
+  }
 
-    return { finalRemTxs, pendingRemTxs }
+  return { finalRemTxs, pendingRemTxs, expiredRemTxs }
 }
   
 
@@ -829,9 +842,9 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
       const actionsHtmlCheck = await checkAndDisplayActions(adminYes, verifiedName, cardIdentifier)
       actionsHtml = actionsHtmlCheck
       
-      const { finalAddTxs, pendingAddTxs, finalRemTxs, pendingRemTxs } = await fetchAllARTxData()
+      const { finalAddTxs, pendingAddTxs, expiredAddTxs, finalRemTxs, pendingRemTxs, expiredRemTxs } = await fetchAllARTxData()
 
-      const confirmedAdd = finalAddTxs.some(
+      const userConfirmedAdd = finalAddTxs.some(
         (tx) => tx.groupId === 694 && tx.member === accountAddress
       )
       const userPendingAdd = pendingAddTxs.some(
@@ -843,31 +856,88 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
       const userPendingRemove = pendingRemTxs.some(
         (tx) => tx.groupId === 694 && tx.admin === accountAddress
       )
+      const userExpiredAdd = expiredAddTxs.some(
+        (tx) => tx.groupId === 694 && tx.member === accountAddress
+      )
+      const userExpiredRem = expiredRemTxs.some(
+        (tx) => tx.groupId === 694 && tx.admin === accountAddress
+      )
+
+      const noExpired = (!userExpiredAdd && !userExpiredRem)
       
       // If user is definitely admin (finalAdd) and not pending removal
-      if (confirmedAdd && !userPendingRemove && existingAdmin) {
+      if (userConfirmedAdd && !userPendingRemove && !userPendingAdd && noExpired && existingAdmin && promotionCard) {
         console.warn(`account was already admin, final. no add/remove pending.`);
         cardColorCode = 'rgb(3, 11, 24)'
-        altText  = `<h4 style="color:rgb(2, 94, 106); margin-bottom: 0.5em;">PROMOTED to ADMIN</h4>`;
+        altText  = `<h4 style="color:rgb(89, 191, 204); margin-bottom: 0.5em;">PROMOTED to ADMIN</h4>`;
         actionsHtml = ''
       } 
 
-      if (confirmedAdd && userPendingRemove && existingAdmin) {
+      if (userConfirmedAdd && !userPendingRemove && userExpiredRem && existingAdmin && promotionCard) {
+        console.warn(`Account has previously had a removal attempt expire`);
+        cardColorCode = 'rgb(33, 40, 11)'
+        altText  = `<h4 style="color:rgb(136, 114, 146); margin-bottom: 0.5em;">PROMOTED, (+Previous Failed Demotion).</h4>`;
+        actionsHtml = ''
+      } 
+
+      if (userConfirmedAdd && !userPendingRemove && userExpiredAdd && existingAdmin && promotionCard) {
+        console.warn(`Account has previously had a removal attempt expire`);
+        cardColorCode = 'rgb(14, 3, 24)'
+        altText  = `<h4 style="color:rgb(114, 117, 146); margin-bottom: 0.5em;">PROMOTED, (+Previous Failed Promotion).</h4>`;
+        actionsHtml = ''
+      } 
+
+      if (userConfirmedAdd && userPendingRemove && existingAdmin && noExpired && !promotionCard) {
         console.warn(`user is a previously approved an admin, but now has pending removals. Keeping html`)
+        altText  = `<h4 style="color:rgb(85, 34, 34); margin-bottom: 0.5em;">Pending REMOVAL in progress...</h4>`;
+      }
+
+      if (userConfirmedAdd && userPendingRemove && existingAdmin && userExpiredAdd && !promotionCard) {
+        console.warn(`user is a previously approved an admin, but now has pending removals. Keeping html`)
+        altText  = `<h4 style="color:rgb(85, 74, 34); margin-bottom: 0.5em;">Pending REMOVAL in progress... (+Previous Failed Promotion)</h4>`;
+      }
+
+      if (userConfirmedAdd && userPendingRemove && existingAdmin && userExpiredRem && !promotionCard) {
+        console.warn(`user is a previously approved an admin, but now has pending removals. Keeping html`)
+        altText  = `<h4 style="color:rgb(198, 26, 13); margin-bottom: 0.5em;">Pending REMOVAL in progress... (+Previous Failed Demotion)</h4>`;
       }
       
-      // If user has a final "remove" and no pending additions or removals
-      if (confirmedRemove && !userPendingAdd && existingMinter) {
-        console.warn(`account was demoted, final. no add pending, existingMinter.`);
+      // If user has a final "remove" and no pending additions or removals and no expired transactions
+       if (confirmedRemove && !userPendingAdd && existingMinter && !existingAdmin && noExpired && !promotionCard) {
+        console.warn(`account was demoted, final. no add pending, existingMinter, no expired add/remove.`);
         cardColorCode = 'rgb(29, 4, 6)'
         altText  = `<h4 style="color:rgb(73, 24, 24); margin-bottom: 0.5em;">DEMOTED from ADMIN</h4>`
         actionsHtml = ''
       }
+
+      if (confirmedRemove && !userPendingAdd && existingMinter && !existingAdmin && userExpiredRem && !promotionCard) {
+        console.warn(`account was demoted, final. no add pending, existingMinter, no expired add/remove.`);
+        cardColorCode = 'rgb(29, 4, 6)'
+        altText  = `<h4 style="color:rgb(170, 32, 48); margin-bottom: 0.5em;">DEMOTED (+Previous Failed Demotion)</h4>`
+        actionsHtml = ''
+      }
+
+      if (confirmedRemove && !userPendingAdd && existingMinter && !existingAdmin && userExpiredAdd && !promotionCard) {
+        console.warn(`account was demoted, final. no add pending, existingMinter, no expired add/remove.`);
+        cardColorCode = 'rgb(29, 4, 6)'
+        altText  = `<h4 style="color:rgb(119, 170, 32); margin-bottom: 0.5em;">DEMOTED (+Previous Failed Promotion)</h4>`
+        actionsHtml = '' 
+      }
       
       // If user has both final remove and pending add, do something else
-      if (confirmedRemove && userPendingAdd && existingMinter) {
+      if (confirmedRemove && userPendingAdd && existingMinter && noExpired && promotionCard) {
         console.warn(`account was previously demoted, but also a pending re-add, allowing actions to show...`)
-        // Possibly show "DEMOTED but re-add in progress" or something
+        altText  = `<h4 style="color:rgb(73, 68, 24); margin-bottom: 0.5em;">Previously DEMOTED from ADMIN, attempted re-add in progress...</h4>`
+      }
+
+      if (confirmedRemove && userPendingAdd && existingMinter && userExpiredAdd && promotionCard) {
+        console.warn(`account was previously demoted, but also a pending re-add, allowing actions to show...`)
+        altText  = `<h4 style="color:rgb(73, 68, 24); margin-bottom: 0.5em;">Previously DEMOTED from ADMIN, attempted re-add in progress...(+Previous Failed Promotion)</h4>`
+      }
+
+      if (confirmedRemove && userPendingAdd && existingMinter && userExpiredRem && promotionCard) {
+        console.warn(`account was previously demoted, but also a pending re-add, allowing actions to show...`)
+        altText  = `<h4 style="color:rgb(73, 68, 24); margin-bottom: 0.5em;">Previously DEMOTED from ADMIN, attempted re-add in progress...(+Previous Failed Demotion)</h4>`
       }
       
     } else if ( verifiedName && illegalDuplicate) {

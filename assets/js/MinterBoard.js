@@ -166,10 +166,17 @@ const loadMinterBoardPage = async () => {
   })
 
   document.getElementById("refresh-cards-button").addEventListener("click", async () => {
+    // Update the caches to include any new changes (e.g. new minters)
+    await initializeCachedGroups()
+  
+    // Optionally show a "refreshing" message
     const cardsContainer = document.getElementById("cards-container")
     cardsContainer.innerHTML = "<p>Refreshing cards...</p>"
+  
+    // Then reload the cards with the updated cache data
     await loadCards(minterCardIdentifierPrefix)
   })
+  
   
 
   document.getElementById("cancel-publish-button").addEventListener("click", async () => {
