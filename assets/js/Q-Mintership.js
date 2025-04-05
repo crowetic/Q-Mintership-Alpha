@@ -1,4 +1,4 @@
-const Q_MINTERSHIP_VERSION = "1.21"
+const Q_MINTERSHIP_VERSION = "1.22"
 
 const messageIdentifierPrefix = `mintership-forum-message`
 const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`
