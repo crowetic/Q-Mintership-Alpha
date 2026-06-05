@@ -4289,6 +4289,11 @@ input[type="checkbox"]:checked::after {
   color: #dffdfa;
 }
 
+.stats-hero-chip--beta {
+  border-color: rgba(241, 189, 106, 0.28);
+  color: #ffe7b7;
+}
+
 .stats-hero-avatar {
   width: 2rem;
   height: 2rem;
@@ -4608,6 +4613,13 @@ input[type="checkbox"]:checked::after {
   overflow: auto;
   scrollbar-gutter: stable both-edges;
   overscroll-behavior: contain;
+}
+
+#stats-live-group-panel .stats-meta-stack {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+  overscroll-behavior: auto;
 }
 
 .stats-meta-row,
