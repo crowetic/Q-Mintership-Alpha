@@ -6187,14 +6187,31 @@ const createModal = (modalType = "") => {
 }
 
 const openLinksModal = async (link) => {
+  if (typeof qMintershipOpenQortalLinkPreviewModal === "function") {
+    await qMintershipOpenQortalLinkPreviewModal(link)
+    return
+  }
+
   const processedLink = await processLink(link)
   const modal = document.getElementById("links-modal")
   const modalContent = document.getElementById("links-modalContent")
-  modalContent.src = qSanitizeUrl(processedLink, "")
-  modal.style.display = "block"
+  if (modalContent) {
+    modalContent.src = qSanitizeUrl(processedLink, "")
+  }
+  if (modal) {
+    modal.style.display = "block"
+  }
 }
 
 const closeModal = async (modalType = "links") => {
+  if (
+    modalType === "links" &&
+    typeof qMintershipCloseQortalLinkPreviewModal === "function"
+  ) {
+    qMintershipCloseQortalLinkPreviewModal()
+    return
+  }
+
   const modal = document.getElementById(`${modalType}-modal`)
   const modalContent = document.getElementById(`${modalType}-modalContent`)
   if (modal) {
@@ -6208,6 +6225,10 @@ const closeModal = async (modalType = "links") => {
 }
 
 const processLink = async (link) => {
+  if (typeof qMintershipResolveQortalLinkPreviewUrl === "function") {
+    return qMintershipResolveQortalLinkPreviewUrl(link)
+  }
+
   if (link.startsWith("qortal://")) {
     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/)
     if (match) {

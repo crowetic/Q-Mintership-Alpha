@@ -509,6 +509,58 @@ const handleBoardRouteFromHash = async (rawHash = window.location.hash) => {
   await focusBoardRoute(route)
 }
 
+const openQortalLinkInNewTab = async (qortalLink = "") => {
+  if (typeof qMintershipOpenQortalLinkInNewTab === "function") {
+    await qMintershipOpenQortalLinkInNewTab(qortalLink)
+    return
+  }
+
+  if (typeof qortalRequest !== "function") {
+    return
+  }
+
+  const normalizedQortalLink = String(qortalLink || "").trim()
+  if (!normalizedQortalLink) {
+    return
+  }
+
+  try {
+    await qortalRequest({
+      action: "OPEN_NEW_TAB",
+      qortalLink: normalizedQortalLink,
+    })
+  } catch (error) {
+    console.error(
+      "Unable to open Qortal link in a new tab:",
+      normalizedQortalLink,
+      error
+    )
+  }
+}
+
+const attachQortalOpenNewTabHandlers = () => {
+  const qortalExternalLinks = document.querySelectorAll(
+    ".q-minter-link[data-qortal-link]"
+  )
+
+  qortalExternalLinks.forEach((link) => {
+    link.addEventListener("click", async (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation()
+      }
+
+      const qortalLink = link.getAttribute("data-qortal-link")?.trim()
+      if (!qortalLink) {
+        return
+      }
+
+      await openQortalLinkInNewTab(qortalLink)
+    })
+  })
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("DOMContentLoaded fired!")
   createScrollToTopButton()
@@ -587,6 +639,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       await loadStatsPage()
     })
   })
+
+  attachQortalOpenNewTabHandlers()
 
   // --- ADMIN CHECK ---
   await verifyUserIsAdmin()

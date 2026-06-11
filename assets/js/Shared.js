@@ -61,9 +61,409 @@ const qSanitizeUrl = (url, fallback = "#") => {
   return qIsSafeUrl(safe) ? safe : fallback
 }
 
+const Q_MINTERSHIP_QORTAL_LINK_PATTERN = /qortal:\/\/[^\s<>"'`]+/gi
+const Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_ID = "links-modal"
+const Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CONTENT_ID = "links-modalContent"
+const Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_LABEL_ID = "links-modal-link-label"
+const Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_OPEN_BUTTON_ID =
+  "links-modal-open-in-new-tab"
+const Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CLOSE_BUTTON_ID =
+  "links-modal-close-button"
+
+const qMintershipStripTrailingQortalLinkPunctuation = (value = "") => {
+  let link = String(value ?? "").trim()
+  let trailingPunctuation = ""
+
+  while (link && /[.,;:!?)}\]]$/.test(link)) {
+    trailingPunctuation = `${link.slice(-1)}${trailingPunctuation}`
+    link = link.slice(0, -1)
+  }
+
+  return {
+    link,
+    trailingPunctuation,
+  }
+}
+
+const qMintershipCreateQortalPreviewLinkElement = (
+  linkText = "",
+  rawLink = linkText
+) => {
+  if (typeof document === "undefined") {
+    return null
+  }
+
+  const anchor = document.createElement("a")
+  anchor.className = "qortal-preview-link"
+  anchor.href = "#"
+  anchor.dataset.qortalLink = String(rawLink || "").trim()
+  anchor.rel = "noopener noreferrer"
+  anchor.textContent = String(linkText || "").trim()
+  return anchor
+}
+
+const qMintershipRenderPlainTextWithQortalLinks = (inputText = "") => {
+  const rawText = String(inputText ?? "")
+  if (!rawText.trim()) {
+    return ""
+  }
+
+  if (typeof document === "undefined") {
+    return qEscapeHtml(rawText)
+  }
+
+  const container = document.createElement("span")
+  const linkPattern = new RegExp(Q_MINTERSHIP_QORTAL_LINK_PATTERN.source, "gi")
+  let lastIndex = 0
+  let match = null
+
+  while ((match = linkPattern.exec(rawText)) !== null) {
+    const matchIndex = Number.isFinite(match.index) ? match.index : 0
+
+    if (matchIndex > lastIndex) {
+      container.appendChild(
+        document.createTextNode(rawText.slice(lastIndex, matchIndex))
+      )
+    }
+
+    const { link, trailingPunctuation } =
+      qMintershipStripTrailingQortalLinkPunctuation(match[0])
+
+    if (link) {
+      const anchor = qMintershipCreateQortalPreviewLinkElement(link, link)
+      if (anchor) {
+        container.appendChild(anchor)
+      } else {
+        container.appendChild(document.createTextNode(link))
+      }
+
+      if (trailingPunctuation) {
+        container.appendChild(document.createTextNode(trailingPunctuation))
+      }
+    } else {
+      container.appendChild(document.createTextNode(match[0]))
+    }
+
+    lastIndex = matchIndex + match[0].length
+  }
+
+  if (lastIndex < rawText.length) {
+    container.appendChild(document.createTextNode(rawText.slice(lastIndex)))
+  }
+
+  return container.innerHTML
+}
+
+const qMintershipLinkifyQortalTextNodes = (rootNode) => {
+  if (
+    typeof document === "undefined" ||
+    !rootNode ||
+    typeof NodeFilter === "undefined"
+  ) {
+    return
+  }
+
+  const textNodes = []
+  const walker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT)
+
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode)
+  }
+
+  for (const textNode of textNodes) {
+    const parentElement = textNode.parentElement
+    if (!parentElement) {
+      continue
+    }
+
+    if (
+      parentElement.closest("a, code, pre, textarea, script, style, kbd, samp")
+    ) {
+      continue
+    }
+
+    const rawText = String(textNode.nodeValue || "")
+    if (!rawText.trim()) {
+      continue
+    }
+
+    const linkPattern = new RegExp(Q_MINTERSHIP_QORTAL_LINK_PATTERN.source, "gi")
+    if (!linkPattern.test(rawText)) {
+      continue
+    }
+
+    linkPattern.lastIndex = 0
+    const fragment = document.createDocumentFragment()
+    let lastIndex = 0
+    let match = null
+    let matched = false
+
+    while ((match = linkPattern.exec(rawText)) !== null) {
+      matched = true
+      const matchIndex = Number.isFinite(match.index) ? match.index : 0
+
+      if (matchIndex > lastIndex) {
+        fragment.appendChild(
+          document.createTextNode(rawText.slice(lastIndex, matchIndex))
+        )
+      }
+
+      const { link, trailingPunctuation } =
+        qMintershipStripTrailingQortalLinkPunctuation(match[0])
+
+      if (link) {
+        const anchor = qMintershipCreateQortalPreviewLinkElement(link, link)
+        if (anchor) {
+          fragment.appendChild(anchor)
+        } else {
+          fragment.appendChild(document.createTextNode(link))
+        }
+
+        if (trailingPunctuation) {
+          fragment.appendChild(document.createTextNode(trailingPunctuation))
+        }
+      } else {
+        fragment.appendChild(document.createTextNode(match[0]))
+      }
+
+      lastIndex = matchIndex + match[0].length
+    }
+
+    if (!matched) {
+      continue
+    }
+
+    if (lastIndex < rawText.length) {
+      fragment.appendChild(document.createTextNode(rawText.slice(lastIndex)))
+    }
+
+    textNode.parentNode?.replaceChild(fragment, textNode)
+  }
+}
+
+const qMintershipResolveQortalLinkPreviewUrl = async (link = "") => {
+  const normalizedLink = String(link || "").trim()
+  if (!normalizedLink) {
+    return ""
+  }
+
+  if (normalizedLink.startsWith("qortal://")) {
+    const match = normalizedLink.match(/^qortal:\/\/([^/]+)(\/.*)?$/)
+    if (match) {
+      const firstParam = match[1].toUpperCase()
+      const remainingPath = match[2] || ""
+      const themeColor = window._qdnTheme || "default"
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`
+    }
+  }
+
+  return qSanitizeUrl(normalizedLink, "")
+}
+
+const qMintershipQortalLinkPreviewState = {
+  rawLink: "",
+  previewUrl: "",
+}
+
+const qMintershipOpenQortalLinkInNewTab = async (link = "") => {
+  if (typeof qortalRequest !== "function") {
+    return
+  }
+
+  const normalizedLink = String(link || "").trim()
+  if (!normalizedLink) {
+    return
+  }
+
+  try {
+    await qortalRequest({
+      action: "OPEN_NEW_TAB",
+      qortalLink: normalizedLink,
+    })
+  } catch (error) {
+    console.error(
+      "Unable to open Qortal link in a new tab:",
+      normalizedLink,
+      error
+    )
+  }
+}
+
+const qMintershipCloseQortalLinkPreviewModal = () => {
+  if (typeof document === "undefined") {
+    return
+  }
+
+  const modal = document.getElementById(Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_ID)
+  const modalContent = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CONTENT_ID
+  )
+  const modalLabel = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_LABEL_ID
+  )
+
+  if (modal) {
+    modal.style.display = "none"
+  }
+  if (modalContent && "src" in modalContent) {
+    modalContent.src = ""
+  }
+  if (modalLabel) {
+    modalLabel.textContent = ""
+  }
+
+  qMintershipQortalLinkPreviewState.rawLink = ""
+  qMintershipQortalLinkPreviewState.previewUrl = ""
+}
+
+const qMintershipEnsureQortalLinkPreviewModal = () => {
+  if (typeof document === "undefined" || !document.body) {
+    return null
+  }
+
+  let modal = document.getElementById(Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_ID)
+  if (modal) {
+    return modal
+  }
+
+  const modalHTML = `
+    <div id="${Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_ID}" role="dialog" aria-modal="true" aria-label="Qortal link preview" style="display: none; position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.72); z-index: 1000;">
+      <div style="position: relative; margin: 4vh auto; width: 90vw; max-width: 92rem; height: 88vh; max-height: 92vh; background: rgba(5, 10, 14, 0.94); border: 1px solid rgba(157, 193, 196, 0.28); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column;">
+        <button id="${Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CLOSE_BUTTON_ID}" type="button" style="position: absolute; top: 0.75rem; right: 0.75rem; background: rgba(8, 14, 18, 0.86); color: white; border: 1px solid rgba(157, 193, 196, 0.38); padding: 0.35rem 0.75rem; border-radius: 8px; cursor: pointer; z-index: 2;">Close</button>
+        <iframe id="${Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CONTENT_ID}" src="" style="width: 100%; flex: 1 1 auto; border: none; min-height: 0;"></iframe>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border-top: 1px solid rgba(157, 193, 196, 0.18); background: rgba(7, 12, 16, 0.96);">
+          <span id="${Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_LABEL_ID}" style="color: rgba(226, 241, 245, 0.8); font-size: 0.85rem; line-height: 1.35; word-break: break-word; flex: 1 1 auto;"></span>
+          <button id="${Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_OPEN_BUTTON_ID}" type="button" style="background: rgba(33, 56, 71, 0.96); color: white; border: 1px solid rgba(157, 193, 196, 0.38); padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; white-space: nowrap;">open in new tab</button>
+        </div>
+      </div>
+    </div>
+  `
+  document.body.insertAdjacentHTML("beforeend", modalHTML)
+
+  modal = document.getElementById(Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_ID)
+  const closeButton = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CLOSE_BUTTON_ID
+  )
+  const openButton = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_OPEN_BUTTON_ID
+  )
+
+  closeButton?.addEventListener("click", qMintershipCloseQortalLinkPreviewModal)
+  openButton?.addEventListener("click", async () => {
+    const rawLink = String(qMintershipQortalLinkPreviewState.rawLink || "").trim()
+    if (!rawLink || typeof qortalRequest !== "function") {
+      return
+    }
+
+    await qMintershipOpenQortalLinkInNewTab(rawLink)
+  })
+
+  modal?.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      qMintershipCloseQortalLinkPreviewModal()
+    }
+  })
+
+  return modal
+}
+
+const qMintershipOpenQortalLinkPreviewModal = async (link = "") => {
+  const modal = qMintershipEnsureQortalLinkPreviewModal()
+  if (!modal) {
+    return
+  }
+
+  const rawLink = String(link || "").trim()
+  if (!rawLink) {
+    return
+  }
+
+  const previewUrl = await qMintershipResolveQortalLinkPreviewUrl(rawLink)
+  const modalContent = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_CONTENT_ID
+  )
+  const modalLabel = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_LABEL_ID
+  )
+  const openButton = document.getElementById(
+    Q_MINTERSHIP_QORTAL_PREVIEW_MODAL_OPEN_BUTTON_ID
+  )
+
+  qMintershipQortalLinkPreviewState.rawLink = rawLink
+  qMintershipQortalLinkPreviewState.previewUrl = previewUrl
+
+  if (modalContent && "src" in modalContent) {
+    modalContent.src = previewUrl || "about:blank"
+  }
+  if (modalLabel) {
+    modalLabel.textContent = rawLink
+  }
+
+  if (openButton) {
+    const canOpenInNewTab =
+      rawLink.toLowerCase().startsWith("qortal://") &&
+      typeof qortalRequest === "function"
+    openButton.disabled = !canOpenInNewTab
+    openButton.title = canOpenInNewTab
+      ? "open in new tab"
+      : "open in new tab is available inside Qortal."
+  }
+
+  modal.style.display = "block"
+}
+
+if (typeof window !== "undefined") {
+  window.qMintershipResolveQortalLinkPreviewUrl =
+    qMintershipResolveQortalLinkPreviewUrl
+  window.qMintershipOpenQortalLinkPreviewModal =
+    qMintershipOpenQortalLinkPreviewModal
+  window.qMintershipCloseQortalLinkPreviewModal =
+    qMintershipCloseQortalLinkPreviewModal
+  window.qMintershipOpenQortalLinkInNewTab = qMintershipOpenQortalLinkInNewTab
+}
+
+if (
+  typeof document !== "undefined" &&
+  typeof window !== "undefined" &&
+  !window.__qMintershipPreviewLinkHandlerBound
+) {
+  window.__qMintershipPreviewLinkHandlerBound = true
+  document.addEventListener(
+    "click",
+    async (event) => {
+      const eventTarget =
+        event.target instanceof Element ? event.target : event.target?.parentElement
+      const previewLink = eventTarget?.closest?.(
+        "a.qortal-preview-link[data-qortal-link]"
+      )
+
+      if (!previewLink) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation()
+      }
+
+      const rawLink =
+        previewLink.getAttribute("data-qortal-link")?.trim() ||
+        previewLink.textContent?.trim() ||
+        ""
+      await qMintershipOpenQortalLinkPreviewModal(rawLink)
+    },
+    true
+  )
+}
+
 const Q_MINTERSHIP_BODY_CONTENT_SELECTORS = [
   ".features7",
   ".features1",
+  ".qm-history-link-row",
   ".footer1",
   ".forum-main",
   ".minter-board-main",
@@ -220,6 +620,12 @@ const qSanitizeRichHtml = (inputHtml) => {
         if (!href) {
           child.removeAttribute("target")
           child.removeAttribute("rel")
+        } else if (href.toLowerCase().startsWith("qortal://")) {
+          child.setAttribute("data-qortal-link", href)
+          child.setAttribute("href", "#")
+          child.classList.add("qortal-preview-link")
+          child.removeAttribute("target")
+          child.setAttribute("rel", "noopener noreferrer")
         } else {
           const target = child.getAttribute("target")
           if (target && target !== "_blank") {
@@ -234,6 +640,7 @@ const qSanitizeRichHtml = (inputHtml) => {
   }
 
   sanitizeNode(template.content)
+  qMintershipLinkifyQortalTextNodes(template.content)
   return template.innerHTML
 }
 
@@ -248,7 +655,7 @@ const qRenderBoardCommentHtml = (inputHtml) => {
     return qSanitizeRichHtml(raw)
   }
 
-  return qEscapeHtml(raw)
+  return qMintershipRenderPlainTextWithQortalLinks(raw)
 }
 
 const qRenderRichContentHtml = (inputHtml) => qRenderBoardCommentHtml(inputHtml)

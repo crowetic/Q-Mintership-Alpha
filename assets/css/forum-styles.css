@@ -1141,6 +1141,29 @@ body {
   padding-left: 1.35rem;
 }
 
+.board-rich-content a.qortal-preview-link,
+.comments-container .comment-body a.qortal-preview-link,
+.comments-section .comment-body a.qortal-preview-link,
+.message-text a.qortal-preview-link {
+  color: #9dd7ff;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(157, 215, 255, 0.55);
+  text-underline-offset: 0.15em;
+}
+
+.board-rich-content a.qortal-preview-link:hover,
+.board-rich-content a.qortal-preview-link:focus-visible,
+.comments-container .comment-body a.qortal-preview-link:hover,
+.comments-container .comment-body a.qortal-preview-link:focus-visible,
+.comments-section .comment-body a.qortal-preview-link:hover,
+.comments-section .comment-body a.qortal-preview-link:focus-visible,
+.message-text a.qortal-preview-link:hover,
+.message-text a.qortal-preview-link:focus-visible {
+  color: #d9f4ff;
+  text-decoration-color: rgba(217, 244, 255, 0.9);
+}
+
 .card-link {
   width: 100%;
   margin-bottom: 1.5vh;
@@ -3118,6 +3141,30 @@ select:focus-visible,
   color: #fff1d8 !important;
 }
 
+.stats-link,
+.stats-link:active {
+  border-color: rgba(203, 209, 218, 0.95) !important;
+}
+
+.stats-link:hover,
+.stats-link:focus,
+.stats-link.focus,
+.stats-link.active {
+  border-color: #f3f5f8 !important;
+}
+
+.q-minter-link {
+  text-transform: none !important;
+  border-color: rgba(229, 181, 92, 0.95) !important;
+}
+
+.q-minter-link:hover,
+.q-minter-link:focus,
+.q-minter-link.focus,
+.q-minter-link.active {
+  border-color: #f4d690 !important;
+}
+
 .navbar-dropdown,
 .menu .navbar,
 .navbar {
@@ -3177,6 +3224,25 @@ select:focus-visible,
 .cid-ttRnAijqXt .card-title {
   color: #f4fbfb !important;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.86);
+}
+
+.qm-history-link-row {
+  background-color: rgba(7, 9, 11, 0.96);
+  border-top: 1px solid var(--qm-border);
+  border-bottom: 1px solid var(--qm-border);
+  padding: 1.2rem 0;
+  text-align: center;
+}
+
+.qm-history-link-row .container {
+  display: flex;
+  justify-content: center;
+}
+
+.qm-history-link-row .btn {
+  min-width: min(100%, 18rem);
+  border-color: rgba(115, 208, 195, 0.58) !important;
+  color: #eafffb !important;
 }
 
 .cid-ttRnlSkg2R {

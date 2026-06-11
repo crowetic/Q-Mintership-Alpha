@@ -2066,6 +2066,11 @@ const toggleEncryptedComments = async (cardIdentifier) => {
 }
 
 const createLinkDisplayModal = async () => {
+  if (typeof qMintershipEnsureQortalLinkPreviewModal === "function") {
+    qMintershipEnsureQortalLinkPreviewModal()
+    return
+  }
+
   const modalHTML = `
     <div id="links-modal" style="display: none; position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.72); z-index: 1000;">
       <div style="position: relative; margin: 4vh auto; width: 90vw; max-width: 92rem; height: 88vh; max-height: 92vh; background: rgba(5, 10, 14, 0.94); border: 1px solid rgba(157, 193, 196, 0.28); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);">
@@ -2079,22 +2084,44 @@ const createLinkDisplayModal = async () => {
 
 // Function to open the modal
 const openLinkDisplayModal = async (link) => {
+  if (typeof qMintershipOpenQortalLinkPreviewModal === "function") {
+    await qMintershipOpenQortalLinkPreviewModal(link)
+    return
+  }
+
   const processedLink = await processQortalLinkForRendering(link) // Process the link to replace `qortal://` for rendering in modal
   const modal = document.getElementById("links-modal")
   const modalContent = document.getElementById("links-modalContent")
-  modalContent.src = qSanitizeUrl(processedLink, "") // Set the iframe source to the link
-  modal.style.display = "block" // Show the modal
+  if (modalContent) {
+    modalContent.src = qSanitizeUrl(processedLink, "") // Set the iframe source to the link
+  }
+  if (modal) {
+    modal.style.display = "block" // Show the modal
+  }
 }
 
 // Function to close the modal
 const closeLinkDisplayModal = async () => {
+  if (typeof qMintershipCloseQortalLinkPreviewModal === "function") {
+    qMintershipCloseQortalLinkPreviewModal()
+    return
+  }
+
   const modal = document.getElementById("links-modal")
   const modalContent = document.getElementById("links-modalContent")
-  modal.style.display = "none" // Hide the modal
-  modalContent.src = "" // Clear the iframe source
+  if (modal) {
+    modal.style.display = "none" // Hide the modal
+  }
+  if (modalContent) {
+    modalContent.src = "" // Clear the iframe source
+  }
 }
 
 const processQortalLinkForRendering = async (link) => {
+  if (typeof qMintershipResolveQortalLinkPreviewUrl === "function") {
+    return qMintershipResolveQortalLinkPreviewUrl(link)
+  }
+
   if (link.startsWith("qortal://")) {
     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/)
     if (match) {

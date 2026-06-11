@@ -1661,6 +1661,21 @@ const buildStatsSourceResourceList = (resources = []) => {
   })
 }
 
+const sortStatsResourcesNewestFirst = (resources = []) =>
+  buildStatsSourceResourceList(resources).sort((a, b) => {
+    const timeDiff = getStatsBoardTimestamp(b) - getStatsBoardTimestamp(a)
+    if (timeDiff !== 0) {
+      return timeDiff
+    }
+    const identifierDiff = String(b.identifier || "").localeCompare(
+      String(a.identifier || "")
+    )
+    if (identifierDiff !== 0) {
+      return identifierDiff
+    }
+    return String(b.name || "").localeCompare(String(a.name || ""))
+  })
+
 const isStatsProgressIdentifier = (identifier = "") =>
   String(identifier || "")
     .trim()
@@ -1756,9 +1771,29 @@ const fetchLatestStatsProgressCheckpoint = async (
     verifiedAdminAddressSet
   )
 
-  const checkpoint = await fetchStatsBoardQdnJsonResource(
-    progressResources[0] || null
-  )
+  let checkpoint = null
+  for (const progressResource of progressResources) {
+    const payload = await fetchStatsBoardQdnJsonResource(progressResource)
+    const progressIdentifier = String(
+      payload?.progressIdentifier || progressResource?.identifier || ""
+    ).trim()
+    const isValidProgressPayload = Boolean(
+      payload &&
+        typeof payload === "object" &&
+        (payload.compileType === "stats-progress" ||
+          isStatsProgressIdentifier(progressIdentifier)) &&
+        payload.source
+    )
+    if (!isValidProgressPayload) {
+      continue
+    }
+
+    checkpoint = {
+      ...payload,
+      progressIdentifier,
+    }
+    break
+  }
   statsBoardState.latestProgressCheckpoint = checkpoint || null
   statsBoardState.latestProgressLoadedAt = now
   return checkpoint || null
@@ -2282,6 +2317,47 @@ const normalizeStatsCompileRecord = (record = {}) => ({
   isBanned: Boolean(record.isBanned),
 })
 
+const resetStatsCompileSessionAggregates = (session = null) => {
+  if (!session) {
+    return null
+  }
+
+  session.summary = {
+    totalNominations: 0,
+    uniqueNominators: 0,
+    uniqueNominees: 0,
+    totalConvertedToMinter: 0,
+    totalApprovedInvites: 0,
+    totalPendingInvites: 0,
+    totalKickedAndBanned: 0,
+    legacyCardCount: 0,
+    legacyConvertedToMinter: 0,
+    legacyApprovedInvites: 0,
+    legacyPendingInvites: 0,
+    legacyKickedAndBanned: 0,
+  }
+  session.uniqueNomineeKeys = {}
+  session.nominatorRowsByKey = {}
+  session.records = []
+  return session
+}
+
+const rebuildStatsCompileSessionAggregates = (session = null, records = null) => {
+  if (!session) {
+    return null
+  }
+
+  const recordsToReplay = Array.isArray(records)
+    ? records.map((record) => normalizeStatsCompileRecord(record))
+    : Array.isArray(session.records)
+    ? session.records.map((record) => normalizeStatsCompileRecord(record))
+    : []
+
+  resetStatsCompileSessionAggregates(session)
+  recordsToReplay.forEach((record) => addStatsCompileRecordToSession(session, record))
+  return session
+}
+
 const normalizeStatsResourcePublisherAddress = (payload = null) =>
   String(
     payload?.generatedBy?.address ||
@@ -2314,6 +2390,9 @@ const hydrateStatsCompileSession = (checkpoint = null) => {
     sourceResources,
   })
 
+  session.progressIdentifier = String(
+    checkpoint.progressIdentifier || session.progressIdentifier || ""
+  ).trim()
   session.createdAt = Number(checkpoint.createdAt || checkpoint.generatedAt || Date.now())
   session.updatedAt = Number(checkpoint.updatedAt || checkpoint.compiledAt || Date.now())
   session.completed = Boolean(checkpoint.completed)
@@ -2383,6 +2462,10 @@ const hydrateStatsCompileSession = (checkpoint = null) => {
       }
   session.nominatorRowsByKey = {
     ...(checkpoint.nominatorRowsByKey || {}),
+  }
+
+  if (session.records.length > 0) {
+    rebuildStatsCompileSessionAggregates(session)
   }
 
   return session
@@ -2498,7 +2581,10 @@ const publishStatsResources = async (resources = []) => {
   }
 
   if (typeof publishMultipleResources === "function") {
-    await publishMultipleResources(publishList)
+    const response = await publishMultipleResources(publishList)
+    if (!response) {
+      throw new Error("QDN multi-resource publish failed.")
+    }
   } else {
     for (const resource of publishList) {
       await qortalRequest({
@@ -2538,7 +2624,7 @@ const filterAdminPublishedStatsResources = async (
       ? await runWithConcurrency(tasks, 5)
       : await Promise.all(tasks.map((task) => task()))
 
-  return buildStatsSourceResourceList(verifiedResources.filter(Boolean))
+  return sortStatsResourcesNewestFirst(verifiedResources.filter(Boolean))
 }
 
 const buildStatsSnapshotPublishResource = async (
@@ -2784,24 +2870,8 @@ const buildStatsSnapshotFromSession = (session = null) => {
     return null
   }
 
+  rebuildStatsCompileSessionAggregates(session)
   const rollups = buildStatsSnapshotRollups(session)
-  const nominators = Object.values(session.nominatorRowsByKey || {})
-    .map((row) => ({
-      ...row,
-      conversionLabel: formatStatsPercent(
-        row.nominationCount > 0 ? row.convertedCount / row.nominationCount : 0
-      ),
-    }))
-    .sort((a, b) => {
-      if (b.nominationCount !== a.nominationCount) {
-        return b.nominationCount - a.nominationCount
-      }
-      if (b.convertedCount !== a.convertedCount) {
-        return b.convertedCount - a.convertedCount
-      }
-      return b.lastNominationAt - a.lastNominationAt
-    })
-
   const currentCards = Array.isArray(session.records)
     ? session.records.filter((record) => !record.isLegacy)
     : []
@@ -2809,9 +2879,6 @@ const buildStatsSnapshotFromSession = (session = null) => {
     ? session.records.filter((record) => record.isLegacy)
     : []
 
-  const uniqueNominators = Object.keys(session.nominatorRowsByKey || {}).length
-  const uniqueNominees = Object.keys(session.uniqueNomineeKeys || {}).length
-  const publisherSummary = rollups.publisherSummary || {}
   const legacyPublisherSummary = rollups.legacyPublisherSummary || {}
   const legacyPublisherRows = Array.isArray(rollups.legacyPublisherRows)
     ? rollups.legacyPublisherRows
@@ -2834,6 +2901,87 @@ const buildStatsSnapshotFromSession = (session = null) => {
         )
       : [],
   }
+  const currentMinterAddressSet = buildStatsCurrentMinterAddressSet(referenceData)
+  const uniqueNomineeKeys = new Set()
+  const nominatorRowsByKey = {}
+  currentCards.forEach((record) => {
+    const nomineeKey = String(
+      record.nomineeAddress || record.nomineeName || ""
+    ).toLowerCase()
+    if (nomineeKey) {
+      uniqueNomineeKeys.add(nomineeKey)
+    }
+
+    const nominatorKey = String(
+      record.nominatorAddress || record.nominatorName || ""
+    ).toLowerCase()
+    if (!nominatorKey) {
+      return
+    }
+
+    const row =
+      nominatorRowsByKey[nominatorKey] || {
+        key: nominatorKey,
+        displayName: record.nominatorName || "Unknown",
+        address: record.nominatorAddress || "",
+        nominationCount: 0,
+        convertedCount: 0,
+        approvedCount: 0,
+        pendingCount: 0,
+        kickedCount: 0,
+        bannedCount: 0,
+        lastNominationAt: 0,
+      }
+
+    row.nominationCount += 1
+    if (resolveStatsRecordCurrentMinterStatus(record, currentMinterAddressSet)) {
+      row.convertedCount += 1
+    }
+    if (record.isApprovedInvite) {
+      row.approvedCount += 1
+    }
+    if (record.isPendingInvite) {
+      row.pendingCount += 1
+    }
+    if (record.isKicked) {
+      row.kickedCount += 1
+    }
+    if (record.isBanned) {
+      row.bannedCount += 1
+    }
+    row.lastNominationAt = Math.max(row.lastNominationAt || 0, record.createdAt || 0)
+    nominatorRowsByKey[nominatorKey] = row
+  })
+  const nominators = Object.values(nominatorRowsByKey)
+    .map((row) => ({
+      ...row,
+      conversionLabel: formatStatsPercent(
+        row.nominationCount > 0 ? row.convertedCount / row.nominationCount : 0
+      ),
+    }))
+    .sort((a, b) => {
+      if (b.nominationCount !== a.nominationCount) {
+        return b.nominationCount - a.nominationCount
+      }
+      if (b.convertedCount !== a.convertedCount) {
+        return b.convertedCount - a.convertedCount
+      }
+      return b.lastNominationAt - a.lastNominationAt
+    })
+  const uniqueNominators = nominators.length
+  const uniqueNominees = uniqueNomineeKeys.size
+  const currentConvertedToMinter = currentCards.filter((record) =>
+    resolveStatsRecordCurrentMinterStatus(record, currentMinterAddressSet)
+  ).length
+  const currentApprovedInvites = currentCards.filter(
+    (record) => record.isApprovedInvite
+  ).length
+  const currentPendingInvites = currentCards.filter(
+    (record) => record.isPendingInvite
+  ).length
+  const currentKickedAndBanned = currentCards.filter(
+    (record) => record.isKicked || record.isBanned
+  ).length
 
   return {
     schemaVersion: 2,
@@ -2865,14 +3013,10 @@ const buildStatsSnapshotFromSession = (session = null) => {
       totalNominations: Number(currentCards.length || 0),
       uniqueNominators,
       uniqueNominees,
-      totalConvertedToMinter: Number(
-        publisherSummary.currentMinterCount || 0
-      ),
-      totalApprovedInvites: Number(publisherSummary.invitedCount || 0),
-      totalPendingInvites: Number(publisherSummary.pendingCount || 0),
-      totalKickedAndBanned: Number(
-        (publisherSummary.kickedCount || 0) + (publisherSummary.bannedCount || 0)
-      ),
+      totalConvertedToMinter: Number(currentConvertedToMinter || 0),
+      totalApprovedInvites: Number(currentApprovedInvites || 0),
+      totalPendingInvites: Number(currentPendingInvites || 0),
+      totalKickedAndBanned: Number(currentKickedAndBanned || 0),
       legacyCardCount: Number(legacyCards.length || 0),
       legacyConvertedToMinter: Number(
         legacyPublisherSummary.currentMinterCount || 0
@@ -2885,7 +3029,7 @@ const buildStatsSnapshotFromSession = (session = null) => {
       ),
       conversionLabel: formatStatsPercent(
         currentCards.length > 0
-          ? Number(publisherSummary.currentMinterCount || 0) / currentCards.length
+          ? Number(currentConvertedToMinter || 0) / currentCards.length
           : 0
       ),
       legacyConversionLabel: formatStatsPercent(
@@ -4246,19 +4390,26 @@ const fetchLatestPublishedStatsSnapshot = async (
         verifiedResources,
         verifiedAdminAddressSet
       )
-  const latestResource = resourcesToUse[0]
-  if (!latestResource) {
-    statsBoardState.latestSnapshot = null
-    return null
+  for (const latestResource of resourcesToUse) {
+    const snapshot = await fetchStatsBoardQdnJsonResource(latestResource)
+    const isValidSnapshot = Boolean(
+      snapshot &&
+        typeof snapshot === "object" &&
+        !isStatsProgressIdentifier(latestResource?.identifier || "") &&
+        snapshot.source &&
+        snapshot.summary &&
+        isStatsResourcePublishedByAdmin(snapshot, verifiedAdminAddressSet)
+    )
+    if (!isValidSnapshot) {
+      continue
+    }
+
+    statsBoardState.latestSnapshot = snapshot
+    return snapshot
   }
 
-  const snapshot = await fetchStatsBoardQdnJsonResource(latestResource)
-  if (!isStatsResourcePublishedByAdmin(snapshot, verifiedAdminAddressSet)) {
-    statsBoardState.latestSnapshot = null
-    return null
-  }
-  statsBoardState.latestSnapshot = snapshot || null
-  return snapshot || null
+  statsBoardState.latestSnapshot = null
+  return null
 }
 
 const getStatsBoardNomineeName = (cardData = {}) =>
@@ -4617,6 +4768,11 @@ const compileAndPublishStats = async ({ publishTimestamp = Date.now() } = {}) =>
     return
   }
 
+  if (!userState.accountName) {
+    alert("A registered name is required to publish stats snapshots.")
+    return
+  }
+
   statsBoardState.compiling = true
   statsBoardState.pauseRequested = false
   setStatsCompileButtonBusy(true)
@@ -4777,15 +4933,20 @@ const compileStatsProgressRun = async ({
     return
   }
 
-  statsBoardState.compiling = true
-  statsBoardState.pauseRequested = false
-  setStatsCompileButtonBusy(true)
   const normalizedWorkflow =
     workflow === "validation"
       ? "validation"
       : workflow === "recreate"
       ? "recreate"
       : "compile"
+  if (normalizedWorkflow !== "validation" && !userState.accountName) {
+    alert("A registered name is required to publish stats snapshots.")
+    return
+  }
+
+  statsBoardState.compiling = true
+  statsBoardState.pauseRequested = false
+  setStatsCompileButtonBusy(true)
 
   const statusEl = getStatsStatusEl()
   const modalSteps = buildStatsCompileSteps(normalizedWorkflow)
@@ -4796,6 +4957,7 @@ const compileStatsProgressRun = async ({
     Boolean(resumeCheckpoint?.completed) &&
     Number(resumeSummary?.remaining || 0) === 0
   let session = null
+  let lastSavedCheckpointNextIndex = -1
 
   const applyStepUpdate = (update = {}) => {
     if (!update || !update.key) {
@@ -5000,6 +5162,21 @@ const compileStatsProgressRun = async ({
               }
             : null,
       })
+      if (normalizedWorkflow !== "validation" && !session.completed) {
+        const checkpointProgress = `${session.nextIndex || 0}/${session.source?.cardCount || 0}`
+        applyStepUpdate({
+          key: "publish",
+          status: "active",
+          detail: `Saving checkpoint ${checkpointProgress}.`,
+        })
+        await publishStatsCompileCheckpoint(session)
+        lastSavedCheckpointNextIndex = Number(session.nextIndex || 0)
+        applyStepUpdate({
+          key: "publish",
+          status: "done",
+          detail: `Saved checkpoint ${checkpointProgress}.`,
+        })
+      }
       if (!session.completed && !statsBoardState.pauseRequested) {
         await qBoardDelay(0)
       }
@@ -5243,7 +5420,9 @@ const compileStatsProgressRun = async ({
       session.finalSnapshotIdentifier = ""
       session.finalPublishedAt = 0
       session.completed = false
-      await publishStatsCompileCheckpoint(session)
+      if (lastSavedCheckpointNextIndex !== Number(session.nextIndex || 0)) {
+        await publishStatsCompileCheckpoint(session)
+      }
 
       applyStepUpdate({
         key: "publish",
