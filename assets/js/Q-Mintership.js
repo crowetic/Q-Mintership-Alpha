@@ -5,6 +5,7 @@ const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`
 // NOTE - SET adminGroups in QortalApi.js to enable admin access to forum for specific groups. Minter Admins will be fetched automatically.
 
 let replyToMessageIdentifier = null
+let replyToMessageAuthorName = ""
 let latestMessageIdentifiers = {} // To keep track of the latest message in each room
 let currentPage = 0 // Track current pagination page
 let existingIdentifiers = new Set() // Keep track of existing identifiers to not pull them more than once.
@@ -644,6 +645,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- ADMIN CHECK ---
   await verifyUserIsAdmin()
+  try {
+    await login()
+  } catch (error) {
+    console.log("Startup login check skipped or unavailable.")
+  }
 
   if (userState.isAdmin && localStorage.getItem("savedAdminData")) {
     console.log("saved admin data found (Q-Mintership.js), loading...")
@@ -809,6 +815,9 @@ const loadForumPage = async () => {
   `
 
   document.body.appendChild(mainContent)
+  if (typeof refreshHubNotificationPrompt === "function") {
+    refreshHubNotificationPrompt()
+  }
 
   // Add event listeners to room buttons
   document.getElementById("minters-room").addEventListener("click", () => {
@@ -879,6 +888,8 @@ const renderPaginationControls = (room, totalMessages, limit) => {
 
 // Main function to load the full content of the room, along with all main functionality -----------------------------------
 const loadRoomContent = async (room) => {
+  replyToMessageIdentifier = null
+  replyToMessageAuthorName = ""
   const forumContent = document.getElementById("forum-content")
 
   if (!forumContent) {
@@ -1165,11 +1176,22 @@ const handleSendMessage = async (
     }
 
     // Build the message object
+    const replyTargetName = String(
+      replyToMessageAuthorName ||
+        messagesById[replyToMessageIdentifier]?.name ||
+        ""
+    ).trim()
+    const hubNotificationDescription = replyTargetName
+      ? await buildHubNotificationDescription([
+          { scope: "forum", role: "reply", value: replyTargetName },
+        ])
+      : ""
     const messageObject = {
       messageHtml,
       hasAttachment: multiResource.length > 0,
       attachments: attachmentIdentifiers,
       replyTo: replyToMessageIdentifier || null, // Include replyTo if applicable
+      replyToAuthor: replyTargetName || null,
     }
 
     // Encode the message object
@@ -1186,6 +1208,9 @@ const handleSendMessage = async (
         service: "MAIL_PRIVATE",
         identifier: messageIdentifier,
         data64: base64Message,
+        ...(hubNotificationDescription
+          ? { description: hubNotificationDescription }
+          : {}),
       })
     } else {
       multiResource.push({
@@ -1193,6 +1218,9 @@ const handleSendMessage = async (
         service: "BLOG_POST",
         identifier: messageIdentifier,
         data64: base64Message,
+        ...(hubNotificationDescription
+          ? { description: hubNotificationDescription }
+          : {}),
       })
     }
 
@@ -1233,6 +1261,7 @@ function clearInputs() {
 
   // Reset other state variables
   replyToMessageIdentifier = null
+  replyToMessageAuthorName = ""
   multiResource = []
   attachmentIdentifiers = []
   selectedImages = []
@@ -1475,6 +1504,7 @@ const fetchFullMessage = async (resource, service, room) => {
       date: formattedTimestamp,
       identifier: resource.identifier,
       replyTo: messageObject?.replyTo || null,
+      replyToAuthor: messageObject?.replyToAuthor || null,
       timestamp,
       attachments: messageObject?.attachments || [],
     }
@@ -1529,6 +1559,7 @@ const fetchReplyData = async (
       date: formattedTimestamp,
       identifier,
       replyTo: messageObject?.replyTo || null,
+      replyToAuthor: messageObject?.replyToAuthor || null,
       timestamp: replyTimestamp,
       attachments: messageObject?.attachments || [],
     }
@@ -1870,6 +1901,7 @@ const handleReplyLogic = (fetchMessages) => {
 
 const showReplyPreview = (repliedMessage) => {
   replyToMessageIdentifier = repliedMessage.identifier
+  replyToMessageAuthorName = String(repliedMessage?.name || "").trim()
   const safeReplyPreview = qSanitizeRichHtml(repliedMessage.content)
 
   const replyContainer = document.createElement("div")
@@ -1881,21 +1913,23 @@ const showReplyPreview = (repliedMessage) => {
     </div>
   `
 
-  if (!document.querySelector(".reply-container")) {
-    const messageInputSection = document.querySelector(".message-input-section")
-    if (messageInputSection) {
-      messageInputSection.insertBefore(
-        replyContainer,
-        messageInputSection.firstChild
-      )
-      document.getElementById("cancel-reply").addEventListener("click", () => {
-        replyToMessageIdentifier = null
-        replyContainer.remove()
-      })
-    }
+  const existingReplyContainer = document.querySelector(".reply-container")
+  if (existingReplyContainer) {
+    existingReplyContainer.remove()
   }
 
   const messageInputSection = document.querySelector(".message-input-section")
+  if (messageInputSection) {
+    messageInputSection.insertBefore(
+      replyContainer,
+      messageInputSection.firstChild
+    )
+    document.getElementById("cancel-reply").addEventListener("click", () => {
+      replyToMessageIdentifier = null
+      replyToMessageAuthorName = ""
+      replyContainer.remove()
+    })
+  }
   const editor = document.querySelector(".ql-editor")
 
   if (messageInputSection) {

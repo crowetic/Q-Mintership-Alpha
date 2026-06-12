@@ -684,6 +684,11 @@ const publishARCard = async (cardIdentifierPrefix) => {
     poll: pollName,
     promotionCard: isPromotionCard,
   }
+  const hubNotificationDescription = String(minterName || "").trim()
+    ? await buildHubNotificationDescription([
+        { scope: "ar", role: "subject", value: minterName },
+      ])
+    : ""
 
   try {
     let base64CardData = await objectToBase64(cardData)
@@ -700,6 +705,9 @@ const publishARCard = async (cardIdentifierPrefix) => {
       service: "BLOG_POST",
       identifier: cardIdentifier,
       data64: base64CardData,
+      ...(hubNotificationDescription
+        ? { description: hubNotificationDescription }
+        : {}),
     })
 
     if (!isExistingCard) {

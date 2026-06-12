@@ -603,6 +603,11 @@ const login = async () => {
       console.log(
         `Account name found in userState: '${userState.accountName}', no need to call API...skipping API call.`
       )
+      if (typeof initializeHubNotifications === "function") {
+        void initializeHubNotifications().catch((error) => {
+          console.warn("Unable to initialize Hub notifications:", error)
+        })
+      }
       return userState.accountName
     }
 
@@ -618,6 +623,11 @@ const login = async () => {
       userState.accountAddress = accountAddress
 
       console.log("User has been logged in successfully!")
+      if (typeof initializeHubNotifications === "function") {
+        void initializeHubNotifications().catch((error) => {
+          console.warn("Unable to initialize Hub notifications:", error)
+        })
+      }
       return userState.accountName
     } else {
       throw new Error(

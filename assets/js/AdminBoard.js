@@ -1499,6 +1499,12 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       poll: pollName,
       topicMode: isTopic,
     }
+    const hubNotificationDescription =
+      !isTopic && String(publishedMinterName || "").trim()
+        ? await buildHubNotificationDescription([
+            { scope: "admin", role: "subject", value: publishedMinterName },
+          ])
+        : ""
 
     // Convert to base64 or fallback
     let base64CardData = await objectToBase64(cardData)
@@ -1552,6 +1558,9 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       data64: base64CardData,
       encrypt: true,
       publicKeys: verifiedAdminPublicKeys,
+      ...(hubNotificationDescription
+        ? { description: hubNotificationDescription }
+        : {}),
     })
 
     setPublishStep("publish", "done")
@@ -1722,6 +1731,14 @@ const postEncryptedComment = async (cardIdentifier) => {
       : {}),
     ...(!editingState.isEditing && replyTo ? { replyTo } : {}),
   }
+  const replyRecipientName = String(
+    existingCommentData?.replyTo?.creator || replyTo?.creator || ""
+  ).trim()
+  const hubNotificationDescription = replyRecipientName
+    ? await buildHubNotificationDescription([
+        { scope: "admin", role: "reply", value: replyRecipientName },
+      ])
+    : ""
   const isEditingThisComment =
     editingState.isEditing &&
     editingState.cardIdentifier === cardIdentifier &&
@@ -1753,6 +1770,9 @@ const postEncryptedComment = async (cardIdentifier) => {
       data64: base64CommentData,
       encrypt: true,
       publicKeys: adminPublicKeys,
+      ...(hubNotificationDescription
+        ? { description: hubNotificationDescription }
+        : {}),
     })
     // alert('Comment posted successfully!')
     rememberOptimisticEncryptedComment(

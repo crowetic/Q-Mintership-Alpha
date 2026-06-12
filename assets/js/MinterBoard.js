@@ -255,6 +255,9 @@ const loadMinterBoardPage = async () => {
     </div>
   `
   document.body.appendChild(mainContent)
+  if (typeof refreshHubNotificationPrompt === "function") {
+    refreshHubNotificationPrompt()
+  }
   if (typeof clearBoardCommentEditState === "function") {
     clearBoardCommentEditState()
   }
@@ -1962,6 +1965,10 @@ const buildMinterNotificationEventData = async (event = {}) => {
   const normalizedEvent = {
     ...event,
   }
+  const hubNotificationDescription =
+    typeof buildMinterHubNotificationDescription === "function"
+      ? await buildMinterHubNotificationDescription(normalizedEvent)
+      : ""
   return {
     ...normalizedEvent,
     version: MINTER_NOTIFICATION_SCHEMA_VERSION,
@@ -1974,6 +1981,7 @@ const buildMinterNotificationEventData = async (event = {}) => {
       normalizedEvent.actorAddress || userState.accountAddress || "",
     actionKey,
     actionIdentifier: buildMinterNotificationActionIdentifier(normalizedEvent),
+    hubNotificationDescription,
   }
 }
 
@@ -3838,6 +3846,9 @@ const sendMinterBoardNotificationDeliveries = async () => {
         service: "BLOG_POST",
         identifier: batch.event.eventId,
         base64: eventData64,
+        ...(eventData.hubNotificationDescription
+          ? { description: eventData.hubNotificationDescription }
+          : {}),
       },
       {
         name: userState.accountName,
@@ -5589,19 +5600,28 @@ const postComment = async (cardIdentifier) => {
           content: replyState.contentHtml || "",
         }
       : null
-    const commentData = {
-      content: commentHtml,
-      creator: userState.accountName,
-      timestamp: Date.now(),
-      ...(existingCommentData?.replyTo
-        ? { replyTo: existingCommentData.replyTo }
-        : {}),
-      ...(!editingState.isEditing && replyTo ? { replyTo } : {}),
-    }
-    const isEditingThisComment =
-      editingState.isEditing &&
-      editingState.cardIdentifier === cardIdentifier &&
-      editingState.commentIdentifier
+  const commentData = {
+    content: commentHtml,
+    creator: userState.accountName,
+    timestamp: Date.now(),
+    ...(existingCommentData?.replyTo
+      ? { replyTo: existingCommentData.replyTo }
+      : {}),
+    ...(!editingState.isEditing && replyTo ? { replyTo } : {}),
+  }
+  const replyRecipientName = String(
+    existingCommentData?.replyTo?.creator || replyTo?.creator || ""
+  ).trim()
+  const hubNotificationDescription =
+    qMintershipActiveBoard === "ar" && replyRecipientName
+      ? await buildHubNotificationDescription([
+          { scope: "ar", role: "reply", value: replyRecipientName },
+        ])
+      : ""
+  const isEditingThisComment =
+    editingState.isEditing &&
+    editingState.cardIdentifier === cardIdentifier &&
+    editingState.commentIdentifier
     const uniqueCommentIdentifier = isEditingThisComment
       ? editingState.commentIdentifier
       : `comment-${cardIdentifier}-${await uid()}`
@@ -5616,6 +5636,9 @@ const postComment = async (cardIdentifier) => {
       service: "BLOG_POST",
       identifier: uniqueCommentIdentifier,
       data64: base64CommentData,
+      ...(hubNotificationDescription
+        ? { description: hubNotificationDescription }
+        : {}),
     })
 
     rememberOptimisticMinterBoardComment(
