@@ -8,6 +8,17 @@
 - Bumped the in-app release label to `v3.0.7`.
 - This release also includes the full nomination-era work that started at the PR #1 nomination update merge.
 
+### Hub Notification Matrix
+
+| Board | Action | Recipient |
+| --- | --- | --- |
+| Forum | Reply to a post | The original post author |
+| Admin Board | Publish or update a card | The minter named on the card |
+| Admin Board | Reply to a comment | The author of the replied-to comment |
+| AR Board | Publish or update a card | The minter named on the card |
+| AR Board | Reply to a comment | The author of the replied-to comment |
+| MinterBoard | Nomination comment, reply, vote, invite, or join events | The nominator, nominee, reply author, minter admins, and other tracked users based on notification settings |
+
 ## Since `f718460` (PR #1 nomination update merge)
 
 - `f718460` - Major updates, including the account detail explorer and broader formatting work across comments and cards.
